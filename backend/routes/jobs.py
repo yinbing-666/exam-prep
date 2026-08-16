@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 import httpx
+import asyncio
 from database import get_db
 from models import ProcessingJob, UploadedFile, Subject
 from auth import get_current_user_id
@@ -188,6 +189,18 @@ def _extract_json_array(text: str) -> list:
         if isinstance(result, list):
             return result
         if isinstance(result, dict):
+            # 兼容 {"content": "[...]"} 包装格式：content 是 JSON 数组字符串时解包
+            content = result.get("content")
+            if isinstance(content, str):
+                inner = content.strip()
+                try:
+                    inner_result = json.loads(inner)
+                    if isinstance(inner_result, list):
+                        return inner_result
+                    if isinstance(inner_result, dict):
+                        return [inner_result]
+                except json.JSONDecodeError:
+                    pass
             return [result]
     except json.JSONDecodeError:
         pass
@@ -332,28 +345,37 @@ async def call_ai_for_batch(job_type: str, content: str, config: dict, api_key: 
     else:
         raise ValueError(f"未知任务类型: {job_type}")
 
-    async with httpx.AsyncClient(timeout=300) as client:
-        resp = await client.post(
-            f"{api_base}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}"},
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"请根据以下课件内容生成学习材料：\n\n{content}"}
-                ],
-                "temperature": 0.7,
-                "max_tokens": 16384,
-            },
-        )
-        if resp.status_code != 200:
-            raise Exception(f"AI API error: {resp.status_code} - {resp.text[:200]}")
+    # 对 5xx 瞬时错误（502/503/504）做指数退避重试，最多 3 次
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        async with httpx.AsyncClient(timeout=300) as client:
+            resp = await client.post(
+                f"{api_base}/chat/completions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"请根据以下课件内容生成学习材料：\n\n{content}"}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 16384,
+                },
+            )
+        if resp.status_code == 200:
+            break
+        if resp.status_code >= 500 and attempt < max_attempts:
+            wait = attempt * 5
+            logger.warning(f"AI API 返回 {resp.status_code}，{wait}s 后重试（第 {attempt}/{max_attempts} 次）")
+            await asyncio.sleep(wait)
+            continue
+        raise Exception(f"AI API error: {resp.status_code} - {resp.text[:200]}")
 
-        data = resp.json()
-        choices = data.get("choices", [])
-        if not choices:
-            raise Exception("AI 返回空结果")
-        return choices[0].get("message", {}).get("content", "")
+    data = resp.json()
+    choices = data.get("choices", [])
+    if not choices:
+        raise Exception("AI 返回空结果")
+    return choices[0].get("message", {}).get("content", "")
 
 
 async def describe_image_with_ai(image_bytes: bytes, image_ext: str, page_num: int, subject_name: str) -> str:
