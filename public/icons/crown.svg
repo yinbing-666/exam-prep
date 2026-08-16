@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140" fill="none">
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="50%" stop-color="#FFA500"/>
+      <stop offset="100%" stop-color="#FF8C00"/>
+    </linearGradient>
+    <linearGradient id="wingGold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FFD700"/>
+      <stop offset="100%" stop-color="#DAA520"/>
+    </linearGradient>
+    <linearGradient id="shieldInner" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFB347"/>
+      <stop offset="100%" stop-color="#FF8C00"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- 左翅膀 -->
+  <g opacity="0.9">
+    <path d="M10 65 Q5 45 18 35 Q28 28 38 40 L35 55 Z" fill="url(#wingGold)"/>
+    <path d="M15 70 Q10 55 22 45 Q32 38 42 50 L38 62 Z" fill="url(#wingGold)"/>
+    <path d="M20 75 Q15 62 26 52 Q35 46 44 56 L40 66 Z" fill="url(#wingGold)"/>
+  </g>
+  
+  <!-- 右翅膀 -->
+  <g opacity="0.9">
+    <path d="M110 65 Q115 45 102 35 Q92 28 82 40 L85 55 Z" fill="url(#wingGold)"/>
+    <path d="M105 70 Q110 55 98 45 Q88 38 78 50 L82 62 Z" fill="url(#wingGold)"/>
+    <path d="M100 75 Q105 62 94 52 Q85 46 76 56 L80 66 Z" fill="url(#wingGold)"/>
+  </g>
+  
+  <!-- 盾牌外框 -->
+  <path d="M60 15 L100 38 L100 82 Q100 115 60 130 Q20 115 20 82 L20 38 Z" fill="url(#gold)" stroke="#DAA520" stroke-width="1.5"/>
+  
+  <!-- 盾牌内部 -->
+  <path d="M60 22 L92 42 L92 78 Q92 108 60 122 Q28 108 28 78 L28 42 Z" fill="url(#shieldInner)"/>
+  
+  <!-- 皇冠底座 -->
+  <rect x="40" y="28" width="40" height="8" rx="2" fill="#DAA520"/>
+  
+  <!-- 皇冠主体 -->
+  <path d="M42 28 L48 12 L54 22 L60 8 L66 22 L72 12 L78 28" fill="#FFD700" stroke="#DAA520" stroke-width="1"/>
+  
+  <!-- 皇冠顶部装饰球 -->
+  <circle cx="48" cy="12" r="3" fill="#FFD700" stroke="#DAA520" stroke-width="0.5"/>
+  <circle cx="60" cy="8" r="3.5" fill="#FFD700" stroke="#DAA520" stroke-width="0.5"/>
+  <circle cx="72" cy="12" r="3" fill="#FFD700" stroke="#DAA520" stroke-width="0.5"/>
+  
+  <!-- 皇冠中央宝石 -->
+  <circle cx="60" cy="20" r="4" fill="#FF4500"/>
+  <circle cx="60" cy="20" r="2.5" fill="#FF6347"/>
+  
+  <!-- 盾牌中央装饰 -->
+  <circle cx="60" cy="70" r="12" fill="#FFD700" stroke="#DAA520" stroke-width="1"/>
+  <circle cx="60" cy="70" r="8" fill="#FF8C00"/>
+  <circle cx="60" cy="70" r="4" fill="#FF4500"/>
+  
+  <!-- 底部横幅 -->
+  <path d="M25 118 L95 118 L90 130 L30 130 Z" fill="#8B0000" stroke="#DAA520" stroke-width="1"/>
+  <path d="M28 118 L92 118 L88 128 L32 128 Z" fill="#A52A2A"/>
+  
+  <!-- 横幅文字 -->
+  <text x="60" y="125" text-anchor="middle" fill="#FFD700" font-size="8" font-weight="bold" font-family="sans-serif">连续打卡王者</text>
+</svg>

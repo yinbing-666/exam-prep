@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>学习方法</title>
+<style>
+:root{--bg:#f6f5f4;--card:#fff;--text:#1a1a1a;--text2:#444;--text3:#999;--accent:#e07030;--border:#f0eeec;--radius:16px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);padding:0 0 100px;-webkit-font-smoothing:antialiased;font-size:15px;line-height:1.7}
+.header{background:linear-gradient(135deg,#e07030 0%,#f09050 100%);color:#fff;padding:28px 20px 32px;border-radius:0 0 28px 28px;margin-bottom:20px;position:relative;overflow:hidden}
+.header::after{content:'';position:absolute;right:-30px;top:-30px;width:120px;height:120px;background:rgba(255,255,255,0.08);border-radius:50%}
+.back-btn{display:inline-block;color:#fff;text-decoration:none;font-size:14px;font-weight:600;margin-bottom:14px;opacity:0.9}
+.header h1{font-size:24px;font-weight:800;letter-spacing:2px;word-spacing:4px}
+.header p{font-size:13px;opacity:0.8;margin-top:6px;font-weight:500}
+.flow{display:flex;align-items:center;justify-content:center;gap:6px;padding:18px 16px;margin:0 16px 20px;background:var(--card);border-radius:var(--radius);box-shadow:0 2px 8px rgba(0,0,0,0.04)}
+.flow-step{padding:8px 14px;border-radius:22px;font-size:14px;font-weight:800;color:#fff;letter-spacing:1px;white-space:nowrap;flex-shrink:0}
+.flow-arrow{font-size:16px;color:#ccc;font-weight:800;flex-shrink:0}
+.section{margin:0 16px 28px}
+.section-header{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.section-icon{font-size:22px}
+.section-title{font-size:18px;font-weight:800;letter-spacing:0.5px}
+.section-desc{font-size:13px;color:var(--text3);margin-bottom:14px;font-weight:500;padding-left:32px}
+.card{background:var(--card);border-radius:var(--radius);margin-bottom:14px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.04);transition:box-shadow 0.2s}
+.card.open{box-shadow:0 4px 16px rgba(0,0,0,0.08)}
+.card-header{padding:18px 16px;cursor:pointer;display:flex;align-items:center;gap:14px;-webkit-tap-highlight-color:transparent;user-select:none}
+.card-header:active{background:#fafaf9}
+.card-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.card-titles{flex:1}
+.card-title{font-size:16px;font-weight:700;letter-spacing:0.3px}
+.card-subtitle{font-size:13px;color:var(--text3);margin-top:3px;font-weight:500;line-height:1.5}
+.card-arrow{font-size:11px;color:#ccc;transition:transform 0.25s ease;font-weight:800;flex-shrink:0}
+.card.open .card-arrow{transform:rotate(90deg)}
+.card-body{display:none;padding:0 16px 20px;border-top:1px solid var(--border);font-size:14.5px;line-height:1.85;color:var(--text2)}
+.card.open .card-body{display:block;padding-top:18px}
+.card-body h3{font-size:15px;font-weight:700;margin:20px 0 8px;color:var(--text);padding-bottom:6px;border-bottom:1px solid var(--border)}
+.card-body h3:first-child{margin-top:0}
+.card-body h4{font-size:14px;font-weight:700;margin:14px 0 6px;color:var(--text)}
+.card-body p{margin:8px 0}
+.card-body ul,.card-body ol{margin:8px 0 8px 22px}
+.card-body li{margin:5px 0}
+.card-body strong{color:var(--text);font-weight:700}
+.card-body table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;border-radius:10px;overflow:hidden}
+.card-body th{padding:10px 12px;background:#f8f7f6;font-weight:700;text-align:left;border-bottom:2px solid var(--border)}
+.card-body td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left}
+.card-body tr:last-child td{border-bottom:none}
+.card-body blockquote{border-left:3px solid var(--accent);padding:10px 14px;margin:10px 0;background:#fff8f4;border-radius:0 10px 10px 0;font-style:italic;font-weight:600;font-size:14px}
+.tip-box{background:#fff8f0;border:1px solid #ffe4c8;border-radius:12px;padding:14px 16px;margin:14px 0;font-size:13.5px;font-weight:600;color:#a04800;line-height:1.7}
+.tip-box::before{content:'💡 '}
+.step-list{counter-reset:step;list-style:none;margin:10px 0;padding:0}
+.step-list li{counter-increment:step;padding:10px 0 10px 40px;position:relative;border-left:2px solid var(--border);margin-left:14px}
+.step-list li:last-child{border-left-color:transparent}
+.step-list li::before{content:counter(step);position:absolute;left:-13px;top:10px;width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.step-list li strong{display:block;margin-bottom:2px}
+.footer-tip{text-align:center;padding:24px 20px;font-size:12px;color:#ccc;font-weight:500}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <a class="back-btn" href="/">← 返回首页</a>
+  <h1>🎓 统一学习方法</h1>
+  <p>输入→理解→巩固→输出→冲刺，五步搞定任何考试</p>
+</div>
+
+<div class="flow">
+  <span class="flow-step" style="background:#1976d2">输入</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step" style="background:#7b1fa2">理解</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step" style="background:#e07030">巩固</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step" style="background:#2e7d32">输出</span>
+  <span class="flow-arrow">→</span>
+  <span class="flow-step" style="background:#c62828">冲刺</span>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-icon">📥</span><span class="section-title">输入 — 怎么学新知识</span></div>
+  <p class="section-desc">带着问题读，比漫无目的地看效率高 3 倍</p>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#1976d2"></div><div class="card-titles"><div class="card-title">五步阅读法（SQ3R）</div><div class="card-subtitle">90% 的人只做了第三步，所以"看了等于没看"</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <ol class="step-list">
+        <li><strong>预览（3 分钟）</strong>快速浏览标题、目录、图表、粗体字。目标：建立全局地图，知道这一章讲什么。</li>
+        <li><strong>提问</strong>把标题改成问题。比如"光合作用的过程" → "光合作用分几步？每步产物是什么？"带着问题读，注意力自动集中。</li>
+        <li><strong>精读</strong>边读边标注关键概念。这不是第一步，而是有了问题框架后的针对性阅读。</li>
+        <li><strong>复述</strong>合上书，用自己的话回答刚才的问题。卡壳 = 没理解，标记出来。</li>
+        <li><strong>复习</strong>当天晚上、隔天、一周后各回顾一次。配合间隔重复，短期记忆变长期记忆。</li>
+      </ol>
+      <div class="tip-box">大多数人只做了第三步。五步全做，效率提升 3-5 倍。</div>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#1976d2"></div><div class="card-titles"><div class="card-title">区分知识类型，选对策略</div><div class="card-subtitle">用错方法是学不会的根本原因</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <p>知识分两类，学习策略完全不同：</p>
+      <table><tr><th>类型</th><th>特点</th><th>学法</th><th>怎么判断学会了</th></tr>
+      <tr><td><strong>理解型</strong></td><td>看懂就能用</td><td>先学原理，再做题验证</td><td>能给别人讲清楚</td></tr>
+      <tr><td><strong>技能型</strong></td><td>必须练才会</td><td>先动手做，再补理论</td><td>能独立做出来</td></tr></table>
+      <p>举例：</p>
+      <ul><li><strong>理解型</strong>：历史事件因果关系、数学公式推导、经济学供需模型</li>
+      <li><strong>技能型</strong>：写作文、做数学证明题、编程、画设计图</li></ul>
+      <div class="tip-box">看一百遍游泳教程（理解型输入），不如自己下水扑腾十分钟（技能型训练）。技能型知识必须通过大量练习才能掌握。</div>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#1976d2"></div><div class="card-titles"><div class="card-title">新旧联系：挂到已有的知识树上</div><div class="card-subtitle">孤立的知识最容易遗忘</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <p>脑科学研究证实：学习就是建立神经连接。孤立的知识容易被大脑"修剪"掉（遗忘），而<strong>和已有知识连在一起的知识会越用越牢</strong>。</p>
+      <h4>操作方法</h4>
+      <ul><li>学新东西时问自己：<strong>"这和我已经知道的什么像？"</strong></li>
+      <li>用类比把抽象变具体：电流 ≈ 水流，电压 ≈ 水压</li>
+      <li>为每个新知识点找 3 个已知知识做关联</li>
+      <li>画知识网络图，把新节点连到旧节点上</li></ul>
+      <div class="tip-box">基础好的人学新东西快，不是因为聪明，是因为可以挂接的"钩子"多。预习就是先建钩子，上课时新知识自动挂上去。</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-icon">🧠</span><span class="section-title">理解 — 怎么真正学会</span></div>
+  <p class="section-desc">读了不代表懂了，能用简单的话讲清楚才算</p>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#7b1fa2"></div><div class="card-titles"><div class="card-title">费曼学习法：以教促学</div><div class="card-subtitle">费曼说：如果你不能简单地解释它，说明你还没真正理解</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <ol class="step-list">
+        <li><strong>选一个概念</strong>比如"什么是通货膨胀"</li>
+        <li><strong>用最简单的话讲出来</strong>假设讲给一个完全不懂的人听，或者直接写在纸上</li>
+        <li><strong>发现卡壳的地方</strong>讲不清楚 = 没真正理解，这就是你的知识盲区</li>
+        <li><strong>回去补盲区，重新讲</strong>每一轮都会比上一轮更简洁、更准确</li>
+      </ol>
+      <h4>实操场景</h4>
+      <ul><li>对着手机录音讲一个知识点</li><li>在笔记里写"一句话定义"</li><li>给同学/朋友讲解（教是最好的学）</li><li>写学习笔记发到社交平台（公众承诺倒逼质量）</li></ul>
+      <div class="tip-box">真正的学习不是记住定义，而是理解背后的原理。能用简单的话讲清楚 = 深度理解的标志。</div>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#7b1fa2"></div><div class="card-titles"><div class="card-title">打包压缩：减轻记忆负担</div><div class="card-subtitle">脑子里同时只能装 4 样东西，但每样可以是一个"压缩包"</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <p>心理学家米勒发现，人脑同时只能记住 <strong>4 样东西</strong>。但每样东西可以像俄罗斯套娃一样嵌套——一个大包里装很多小东西，仍然只算一样。</p>
+      <h4>操作方法</h4>
+      <ul><li><strong>提炼关键词</strong>：把一段话压缩成一个词或一句话</li>
+      <li><strong>打包归类</strong>：把属于同一主题的知识点归到一起</li>
+      <li><strong>口诀/缩写</strong>：比如三角函数——"奇变偶不变，符号看象限"</li>
+      <li><strong>公式化</strong>：把复杂关系写成简单公式或模型</li></ul>
+      <div class="tip-box">打包完成后，知识点变成条件反射——看到题目立刻反应，不需要逐步推理。这就是"熟练"的本质。</div>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#7b1fa2"></div><div class="card-titles"><div class="card-title">追问本质：不停留在表面</div><div class="card-subtitle">所有知识最终都可以收敛到几个基本原理</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <p>面对任何知识点，连续追问"为什么"，直到找到不可再分的本质。</p>
+      <h4>示例</h4>
+      <ul><li>"为什么苹果落地？" → 万有引力</li>
+      <li>"为什么有万有引力？" → 质量弯曲时空</li>
+      <li>"为什么质量弯曲时空？" → 这就是物理学的最底层假设了</li></ul>
+      <p>找到了本质，所有相关知识点都能推导出来。不需要死记 10 个细节，只需要记住 1 个原理。</p>
+      <div class="tip-box">抽象层次越高，迁移范围越广。掌握本质原理后，遇到没见过的题也能推导。</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-icon">🔒</span><span class="section-title">巩固 — 怎么不忘</span></div>
+  <p class="section-desc">遗忘是必然的，科学复习是对抗遗忘的唯一方法</p>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#e07030"></div><div class="card-titles"><div class="card-title">间隔重复：艾宾浩斯遗忘曲线验证的复习策略</div><div class="card-subtitle">在快忘记但还没忘记的时候复习，效率最高</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <h4>遗忘规律</h4>
+      <ul><li>学习后 20 分钟遗忘 42%</li><li>1 天后遗忘 67%</li><li>1 周后遗忘 77%</li></ul>
+      <p>遗忘不是 bug，是 feature——大脑需要遗忘来过滤噪音。</p>
+      <h4>最佳复习时间点</h4>
+      <table><tr><th>轮次</th><th>间隔</th><th>目的</th></tr>
+      <tr><td>第 1 次</td><td>当天晚上</td><td>巩固当天所学</td></tr>
+      <tr><td>第 2 次</td><td>隔 1 天</td><td>防止快速遗忘</td></tr>
+      <tr><td>第 3 次</td><td>隔 3 天</td><td>强化记忆通路</td></tr>
+      <tr><td>第 4 次</td><td>隔 7 天</td><td>转入中期记忆</td></tr>
+      <tr><td>第 5 次</td><td>隔 30 天</td><td>形成长期记忆</td></tr></table>
+      <h4>关键原则</h4>
+      <ul><li><strong>主动回忆 > 被动重读</strong>：合上书回忆比重读 3 遍更有效</li>
+      <li><strong>做题 > 看笔记</strong>：任何需要"提取"的方式都比重读强</li>
+      <li><strong>间隔 > 集中</strong>：分 5 天每天 1 小时 > 1 天突击 5 小时</li></ul>
+      <div class="tip-box">研究显示 90% 的人中间隔学习比集中学习更有效。但 72% 的人主观感觉"集中更好"——这是认知错觉，不要被感觉欺骗。</div>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#e07030"></div><div class="card-titles"><div class="card-title">错题本：最精准的补漏工具</div><div class="card-subtitle">每道错题都是一个知识盲区的信号</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <h4>错题本的正确用法</h4>
+      <ol class="step-list">
+        <li><strong>记录错因，不是抄题目</strong>"混淆了充分条件和必要条件"比抄一遍题有用 10 倍</li>
+        <li><strong>标注知识点</strong>这道题考的是哪个概念，属于哪一章</li>
+        <li><strong>写正确思路</strong>从哪里切入、关键步骤是什么、容易在哪一步出错</li>
+        <li><strong>定期重做（不是看）</strong>看一遍觉得自己会了 ≠ 真的会了。必须重新做一遍</li>
+        <li><strong>同类题归纳</strong>每周把错题按知识点分类，找出反复错的类型</li>
+      </ol>
+      <div class="tip-box">考试前只看错题本就够了。错题本是你个人专属的"薄弱点清单"，比任何复习资料都精准。</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-icon">🚀</span><span class="section-title">输出 — 怎么用起来</span></div>
+  <p class="section-desc">知识不用就会生锈，做题、教人、写笔记都是输出</p>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#2e7d32"></div><div class="card-titles"><div class="card-title">刻意练习：突破舒适区</div><div class="card-subtitle">重复做已经会的题不会进步，做略超出能力的题才会</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <table><tr><th>普通练习</th><th>刻意练习</th></tr>
+      <tr><td>做已经会的题找自信</td><td>做略超出能力的题</td></tr>
+      <tr><td>做完就过</td><td>做完分析错因和改进方向</td></tr>
+      <tr><td>大量重复同一类</td><td>针对性突破薄弱点</td></tr>
+      <tr><td>待在舒适区</td><td>待在"有点难但不至于崩溃"的区域</td></tr></table>
+      <h4>实操建议</h4>
+      <ul><li>选择题/判断题 → 巩固基础概念（舒适区）</li>
+      <li>简答题/计算题 → 突破理解深度（学习区）</li>
+      <li>综合设计题 → 模拟真实考试压力（挑战区）</li>
+      <li>限时做题 → 培养速度感和抗压能力</li></ul>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#2e7d32"></div><div class="card-titles"><div class="card-title">经验循环：从做中学</div><div class="card-subtitle">每做完一轮都要反思和调整，而不是无脑重复</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <p>每次做完题/学完一章，问自己四个问题：</p>
+      <ol class="step-list">
+        <li><strong>今天最关键的经历是什么？</strong>学了什么、做了什么题、遇到了什么困难</li>
+        <li><strong>我怎么理解它？</strong>哪些懂了、哪些没懂、为什么没懂</li>
+        <li><strong>下一步做什么？</strong>补哪个知识点、做什么类型的练习</li>
+        <li><strong>行动后有什么新反馈？</strong>做题正确率是否提高、理解是否加深</li>
+      </ol>
+      <div class="tip-box">这就是"学习的真相"里强调的学习循环：经历→解读→行动→新经历。关键是有反思和调整，而不是无脑重复。</div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-icon">🎯</span><span class="section-title">期末冲刺 — 考前两周实战</span></div>
+  <p class="section-desc">有计划的人比没计划的人效率高 3 倍</p>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#c62828"></div><div class="card-titles"><div class="card-title">考前两周作战计划</div><div class="card-subtitle">第一周扫盲，第二周突破+模拟</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <h4>第一周：全面扫盲</h4>
+      <ul><li>回归教材，精读课本，不放过任何角落</li><li>对照考纲/老师划的重点，标注薄弱章节</li><li>每章做完后用"一句话"总结核心</li><li>归纳各章常见题型和解题套路</li></ul>
+      <h4>第二周：重点突破 + 模拟实战</h4>
+      <ul><li>重做错题本（不是看，是重新做）</li><li>找往年真题/模拟卷，限时模拟</li><li>做完立刻批改，分析错因</li><li>考前一天：只看错题本和一句话总结</li></ul>
+      <h4>每天节奏</h4>
+      <table><tr><th>时段</th><th>做什么</th><th>原因</th></tr>
+      <tr><td>上午</td><td>攻克最难的章节</td><td>大脑最清醒</td></tr>
+      <tr><td>下午</td><td>做题练习 + 错题整理</td><td>动手为主</td></tr>
+      <tr><td>晚上</td><td>回顾当天所学</td><td>间隔重复第一轮</td></tr>
+      <tr><td>睡前</td><td>快速过一遍一句话总结</td><td>睡眠巩固记忆</td></tr></table>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#c62828"></div><div class="card-titles"><div class="card-title">做题的正确姿势</div><div class="card-subtitle">不是做得多就好，关键是怎么做</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <h4>做题三步法</h4>
+      <ol class="step-list">
+        <li><strong>独立完成</strong>不翻书、不看答案，模拟考试环境</li>
+        <li><strong>对答案分析</strong>不只看对错，分析每道题的考点和自己的思路偏差</li>
+        <li><strong>归纳总结</strong>这道题属于什么题型？用了什么方法？同类题怎么做？</li>
+      </ol>
+      <h4>目标：快、准、巧</h4>
+      <ul><li><strong>快</strong>——限时训练，培养速度感</li><li><strong>准</strong>——减少粗心，养成检查习惯</li><li><strong>巧</strong>——找更简洁的解法，节省考试时间</li></ul>
+      <h4>避免的坑</h4>
+      <ul><li>❌ 只看不做（眼高手低）</li><li>❌ 做完不分析（白做）</li><li>❌ 只做简单题（自我欺骗）</li><li>❌ 不限时做（考试时来不及）</li></ul>
+    </div>
+  </div>
+
+  <div class="card" onclick="this.classList.toggle('open')">
+    <div class="card-header"><div class="card-dot" style="background:#c62828"></div><div class="card-titles"><div class="card-title">状态不好怎么办</div><div class="card-subtitle">一看书就困、焦虑学不进去的应急方案</div></div><span class="card-arrow">▶</span></div>
+    <div class="card-body">
+      <h4>一看书就困？</h4>
+      <ul><li>给自己限时——"只学 25 分钟就休息"（番茄钟）</li><li>站着学/换个环境——打破身体的惰性</li><li>先做最简单的题——用成就感带动状态</li><li>保证睡眠——熬夜复习得不偿失</li></ul>
+      <h4>焦虑/学不进去？</h4>
+      <ul><li>把大目标拆成小任务——"今天只搞定一章"</li><li>用进度条可视化——看到已完成的部分</li><li>奖励机制——学完一个番茄奖励自己 5 分钟手机</li><li>接受不完美——不需要考满分，及格就是胜利</li></ul>
+      <div class="tip-box">李笑来在"学习的真相"里说过：番茄工作法的真正价值不是 25 分钟的专注，而是"预估→跟踪→对比"的反馈闭环——持续校准你对时间的感知能力。</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer-tip">融合认知科学研究与费曼、李笑来等人的学习方法论 · 持续更新</div>
+
+</body>
+</html>
