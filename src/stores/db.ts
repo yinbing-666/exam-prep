@@ -80,9 +80,50 @@ export function getDirtyKeys(storeName: StoreName): string[] {
 }
 
 export function clearDirtyKeys(storeName: StoreName, keys: string[]): void {
-  if (keys.length === 0) return;
-  const rest = readDirty(storeName).filter(k => !keys.includes(k));
-  writeDirty(storeName, rest);
+    if (keys.length === 0) return;
+    const rest = readDirty(storeName).filter(k => !keys.includes(k));
+    writeDirty(storeName, rest);
+}
+
+// ── 同步墓碑：本地删除的记录标记，随下一次 push 推送到后端，防止「本地删→pull 复活」────
+// 存 localStorage（而非 IndexedDB），避免墓碑本身进入同步数据
+const TOMBSTONE_KEY = 'exam-prep-sync-tombstones';
+
+export interface SyncTombstone {
+    storeName: StoreName;
+    itemId: string;
+    updatedAt: number;
+}
+
+function readTombstones(): SyncTombstone[] {
+    try {
+        return JSON.parse(localStorage.getItem(TOMBSTONE_KEY) || '[]');
+    } catch { return []; }
+}
+
+function writeTombstones(items: SyncTombstone[]): void {
+    localStorage.setItem(TOMBSTONE_KEY, JSON.stringify(items));
+}
+
+/** 标记一条本地删除（墓碑），由 syncPush 推送；推送成功后调用 clearTombstones 清除 */
+export function markTombstone(storeName: StoreName, itemId: string): void {
+    const tombstone: SyncTombstone = { storeName, itemId, updatedAt: Date.now() };
+    const current = readTombstones().filter(t => !(t.storeName === storeName && t.itemId === itemId));
+    current.push(tombstone);
+    writeTombstones(current);
+}
+
+/** 读取某个 store 的墓碑列表 */
+export function getTombstones(storeName: StoreName): SyncTombstone[] {
+    return readTombstones().filter(t => t.storeName === storeName);
+}
+
+/** 推送成功后清除对应墓碑标记 */
+export function clearTombstones(storeName: StoreName, tombstones: SyncTombstone[]): void {
+    if (tombstones.length === 0) return;
+    const ids = new Set(tombstones.map(t => t.itemId));
+    const rest = readTombstones().filter(t => !(t.storeName === storeName && ids.has(t.itemId)));
+    writeTombstones(rest);
 }
 
 export function put<T>(storeName: StoreName, value: T): Promise<void> {
@@ -134,11 +175,16 @@ export async function putMany<T>(storeName: StoreName, values: T[]): Promise<voi
   markDirtyKeys(storeName, writtenKeys);
 }
 
-export async function deleteById(storeName: StoreName, id: string): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(storeName, 'readwrite');
-  tx.objectStore(storeName).delete(id);
-  return new Promise((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+export async function deleteById(storeName: StoreName, id: string, opts?: { fromSync?: boolean }): Promise<void> {
+    const db = await openDB();
+    const tx = db.transaction(storeName, 'readwrite');
+    tx.objectStore(storeName).delete(id);
+    await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
+    // 本地删除（非同步引起）写入墓碑，确保删除能通过 syncPush 推送到后端；
+    // fromSync=true（syncPull 执行远端墓碑）时不写墓碑，避免删除被再次推送造成循环
+    if (!opts?.fromSync) {
+        markTombstone(storeName, id);
+    }
 }
 
 export async function clearStore(storeName: StoreName): Promise<void> {

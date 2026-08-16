@@ -19,6 +19,8 @@ VALID_STORES = [
 class SyncItem(BaseModel):
     item_id: str
     # 记录级更新时间戳（epoch ms）由 data.updatedAt 携带，用于按记录合并
+    # 墓碑：本地删除的记录以 data={"deleted": true, "updatedAt": <epoch ms>} 推送，
+    # 后端照常 upsert（保留 deleted 字段），pull 时照常返回，由客户端按时间戳裁决是否删除本地
     data: dict
 
 
@@ -56,7 +58,9 @@ def push_data(req: PushReq, user_id: str = Depends(get_current_user_id), db: Ses
         ).first()
 
         if existing:
-            # 按 updated_at 大者胜出合并：客户端时间戳更旧时不覆盖服务器上的新版本
+            # 按 updated_at 大者胜出合并：客户端时间戳更旧时不覆盖服务器上的新版本。
+            # 墓碑记录（data.deleted 为 true）与普通记录同样处理：墓碑较新则覆盖为墓碑
+            #（其余设备 pull 后删除本地）；墓碑较旧则跳过（保留服务器上的新版本/新墓碑）
             try:
                 existing_data = json.loads(existing.data)
             except (json.JSONDecodeError, TypeError):

@@ -4,7 +4,7 @@
 // updatedAt（epoch ms），新者胜出，不再全量盲覆盖。
 
 import { getToken } from './auth';
-import { getAll, getById, putSynced, clearDirtyKeys, getDirtyKeys, markDirtyKeys, type StoreName } from './db';
+import { getAll, getById, putSynced, deleteById, clearDirtyKeys, getDirtyKeys, markDirtyKeys, getTombstones, clearTombstones, type StoreName } from './db';
 
 // 需要同步的store（keyPath都是'id'的）
 const SYNC_STORES: StoreName[] = ['studySets', 'modules', 'fsrsCards', 'gamification', 'materials', 'dailyPlans', 'mockExams', 'mockAttempts'];
@@ -39,29 +39,35 @@ async function apiFetch(path: string, body: unknown) {
   return resp.json();
 }
 
-/** 把某个 store 中自上次推送后变更过的记录推送到后端（记录带 updatedAt，由后端按时间戳合并） */
+/** 把某个 store 中自上次推送后变更过的记录推送到后端（记录带 updatedAt，由后端按时间戳合并）；本地删除的墓碑一并推送 */
 export async function syncPush(storeName: StoreName): Promise<void> {
-  const token = getToken();
-  if (!token) return;
-  const dirtyKeys = getDirtyKeys(storeName);
-  if (dirtyKeys.length === 0) return;
-  try {
-    const key = getKeyForStore(storeName);
-    // 脏标记里可能含已本地删除的记录（无删除同步，跳过即可），推送成功后统一清掉标记
-    const items = [];
-    for (const dirtyKey of dirtyKeys) {
-      const record = await getById<Record<string, unknown>>(storeName, dirtyKey);
-      if (record) {
-        items.push({ item_id: String(record[key]), data: record });
-      }
+    const token = getToken();
+    if (!token) return;
+    const dirtyKeys = getDirtyKeys(storeName);
+    const tombstones = getTombstones(storeName);
+    if (dirtyKeys.length === 0 && tombstones.length === 0) return;
+    try {
+        const key = getKeyForStore(storeName);
+        // 脏标记里可能含已本地删除的记录（已写入墓碑，此处跳过即可），推送成功后统一清掉标记
+        const items: Array<{ item_id: string; data: Record<string, unknown> }> = [];
+        for (const dirtyKey of dirtyKeys) {
+            const record = await getById<Record<string, unknown>>(storeName, dirtyKey);
+            if (record) {
+                items.push({ item_id: String(record[key]), data: record });
+            }
+        }
+        // 墓碑：本地已删除的记录以 {deleted: true, updatedAt} 推送，后端照常 upsert
+        for (const t of tombstones) {
+            items.push({ item_id: t.itemId, data: { deleted: true, updatedAt: t.updatedAt } });
+        }
+        if (items.length > 0) {
+            await apiFetch('/api/sync/push', { store_name: storeName, items });
+        }
+        clearDirtyKeys(storeName, dirtyKeys);
+        clearTombstones(storeName, tombstones);
+    } catch (err) {
+        console.warn(`[sync] push ${storeName} failed:`, err);
     }
-    if (items.length > 0) {
-      await apiFetch('/api/sync/push', { store_name: storeName, items });
-    }
-    clearDirtyKeys(storeName, dirtyKeys);
-  } catch (err) {
-    console.warn(`[sync] push ${storeName} failed:`, err);
-  }
 }
 
 /** 从后端拉取数据：逐条比较 updatedAt，新者胜出（本地较新则保留并补脏标记待推送） */
@@ -87,6 +93,13 @@ export async function syncPull(storeNames?: StoreName[]): Promise<void> {
         if (localRecord && localTs !== null && (serverTs === null || localTs > serverTs)) {
           // 本地较新（或服务器记录无时间戳）：保留本地，标记为脏等待推送
           localNewerKeys.push(it.item_id);
+          continue;
+        }
+        if (serverRecord.deleted === true) {
+          // 服务器墓碑较新：删除本地记录（fromSync=true 不再写新墓碑，避免删除被再次推送循环）
+          if (localRecord) {
+            await deleteById(storeName, it.item_id, { fromSync: true });
+          }
           continue;
         }
         // 本地缺失 / 服务器较新 / 双方均无时间戳（以服务器为基准）→ 取服务器版本
