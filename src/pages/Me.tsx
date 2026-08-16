@@ -32,17 +32,25 @@ export default function Me() {
   const unlocked = achievements.filter(a => a.unlocked).length;
 
   async function exportData() {
-    // 全量备份：profile/成就（localStorage）+ IndexedDB 全部 store
+    // 全量备份：profile/成就（localStorage）+ IndexedDB 全部 store + 本地配置（科目偏好/模型配置等）
     const storeNames = ['studySets', 'results', 'mastered', 'modules', 'mockExams', 'mockAttempts', 'materials', 'dailyPlans', 'fsrsCards', 'gamification'];
     const stores: Record<string, unknown[]> = {};
     for (const name of storeNames) {
       try { stores[name] = await getAll(name as never); } catch { stores[name] = []; }
     }
+    const localStorageSnapshot: Record<string, unknown> = {};
+    for (const key of ['exam-prep-subject-prefs', 'exam-prep-active-subject', 'exam-prep-model-config', 'exam-prep-subjects']) {
+      const raw = localStorage.getItem(key);
+      if (raw !== null) {
+        try { localStorageSnapshot[key] = JSON.parse(raw); } catch { localStorageSnapshot[key] = raw; }
+      }
+    }
     const blob = new Blob([JSON.stringify({
-      version: 2,
+      version: 3,
       profile,
       achievements,
       stores,
+      localStorage: localStorageSnapshot,
       exportedAt: new Date().toISOString(),
     }, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -58,24 +66,43 @@ export default function Me() {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async event => {
+      let data: any;
       try {
-        const data = JSON.parse(String(event.target?.result || '{}'));
-        if (data.profile) {
+        data = JSON.parse(String(event.target?.result || '{}'));
+      } catch {
+        alert('导入失败：文件不是合法的 JSON');
+        return;
+      }
+      if (!data || typeof data !== 'object' || Array.isArray(data)) {
+        alert('导入失败：文件格式不正确');
+        return;
+      }
+      try {
+        if (data.profile && typeof data.profile === 'object') {
           await saveProfile(data.profile);
           setProfile(data.profile);
         }
-        if (data.achievements) {
+        if (Array.isArray(data.achievements)) {
           await saveAchievements(data.achievements);
           setAchievements(data.achievements);
         }
         if (data.stores && typeof data.stores === 'object') {
           for (const name of Object.keys(data.stores)) {
-            try { await putMany(name as never, data.stores[name] || []); } catch { /* 跳过无法恢复的 store */ }
+            if (Array.isArray(data.stores[name])) {
+              try { await putMany(name as never, data.stores[name]); } catch { /* 跳过无法恢复的 store */ }
+            }
+          }
+        }
+        if (data.localStorage && typeof data.localStorage === 'object') {
+          for (const [key, val] of Object.entries(data.localStorage)) {
+            try {
+              localStorage.setItem(key, typeof val === 'string' ? val : JSON.stringify(val));
+            } catch { /* 跳过无法恢复的 key */ }
           }
         }
         alert('导入成功');
       } catch {
-        alert('导入失败，文件格式不正确');
+        alert('导入失败，数据结构不正确');
       }
     };
     reader.readAsText(file);

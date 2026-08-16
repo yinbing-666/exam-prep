@@ -1,7 +1,6 @@
 import { fsrs, createEmptyCard, State, Rating, generatorParameters } from 'ts-fsrs'
 import { openDB, getAll, put, putMany, getById, deleteById } from '../stores/db'
 import { schedulePush } from '../stores/sync'
-import type { Question } from '../types'
 
 // ─── FSRS Card type stored in IndexedDB ─────────────────────────
 export interface FsrsCard {
@@ -179,23 +178,6 @@ export async function cardExists(questionId: string): Promise<boolean> {
   return !!card
 }
 
-/** Auto-create FSRS cards for wrong questions after a quiz */
-export async function createCardsForWrongQuestions(
-  questions: Question[],
-  userAnswers: Record<string, { answer: string; correct: boolean }>,
-): Promise<FsrsCard[]> {
-  const cards: FsrsCard[] = []
-  for (const q of questions) {
-    const result = userAnswers[q.id]
-    if (result && !result.correct) {
-      const back = `**答案：** ${q.answer}\n\n**解析：** ${q.explanation}`
-      const card = await createFsrsCard(q.question, back, q.id)
-      cards.push(card)
-    }
-  }
-  return cards
-}
-
 /** Get all FSRS cards */
 export async function getAllFsrsCards(): Promise<FsrsCard[]> {
   return getAll<FsrsCard>('fsrsCards')
@@ -330,9 +312,11 @@ export function calculateStreak(): number {
         const dateStr = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
         const found = sorted.find(h => h.date === dateStr)
         if (found) {
-          if (streak === 0 && i === 0 && rec.reviews > 0) streak = 1
-          else if (streak === 0 && i === 0) { /* skip, today has no reviews yet */ }
-          else streak++
+          if (streak === 0 && i === 0) {
+            // 今天没有复习记录（streak 仍为 0），跳过今天不计数
+          } else {
+            streak++
+          }
         } else {
           break
         }

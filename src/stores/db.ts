@@ -5,11 +5,17 @@ const DB_VERSION = 6;
 
 export type StoreName = 'studySets' | 'results' | 'mastered' | 'modules' | 'mockExams' | 'mockAttempts' | 'materials' | 'dailyPlans' | 'fsrsCards' | 'gamification';
 
+// 模块级单例连接：避免每次读写都新建 IDBDatabase 连接
+let dbPromise: Promise<IDBDatabase> | null = null;
+
 export function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbPromise) return dbPromise;
+  dbPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
+      // DB_VERSION 历史演进：各版本逐步新增 store，所有 store 均为简单 keyPath 存储，
+      // 无索引、无 schema 变更，升级时只需补建缺失的 store，无需字段迁移。
       const stores: StoreName[] = ['studySets', 'results', 'mastered', 'modules', 'mockExams', 'mockAttempts', 'materials', 'dailyPlans', 'fsrsCards', 'gamification'];
       const keyPaths: Record<string, string> = {
         studySets: 'id', results: 'questionId', mastered: 'questionId',
@@ -23,8 +29,9 @@ export function openDB(): Promise<IDBDatabase> {
       }
     };
     req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onerror = () => { dbPromise = null; reject(req.error); };
   });
+  return dbPromise;
 }
 
 export async function getAll<T>(storeName: StoreName): Promise<T[]> {

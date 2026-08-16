@@ -44,8 +44,11 @@ export async function batchSaveQuestions(
     }
 
     const data = await resp.json();
-    console.log(`[ai/api] 成功保存 ${data.saved ?? questions.length} 道题目到后端`);
-    return { saved: data.saved ?? questions.length, skipped: data.skipped ?? 0 };
+    // 后端 /api/questions/batch 返回 {results, new, duplicates}，读 new/duplicates
+    const saved = typeof data.new === 'number' ? data.new : questions.length;
+    const skipped = typeof data.duplicates === 'number' ? data.duplicates : 0;
+    console.log(`[ai/api] 成功保存 ${saved} 道题目到后端（重复 ${skipped}）`);
+    return { saved, skipped };
   } catch (e) {
     console.warn('[ai/api] 保存题目网络错误:', e);
     return { saved: 0, skipped: questions.length };
