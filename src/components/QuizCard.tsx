@@ -13,6 +13,15 @@ interface QuizCardProps {
 export default function QuizCard({ question: q, answer, showResult, onAnswer, selfGrade }: QuizCardProps) {
   // 有选项的题（选择/带选项判断）走选项作答；其余题型（简答/论述/程序/填空/计算/画图等）走文本作答
   const isObjective = q.type === 'choice' || (q.type === 'judge' && !!q.options);
+  // 答案比对：AI 生成的 answer 可能是选项字母（"B"）或完整选项文本（"B. 选项1"），用户作答同理，需提取字母后比较
+  const letterOf = (s: string) => s.match(/^([A-Ha-h])(?=[.、:：\s]|$)/)?.[1]?.toUpperCase() ?? '';
+  const sameAnswer = (a: string, b: string) => {
+    const x = a.trim(), y = b.trim();
+    if (!x || !y) return false;
+    if (x === y) return true;
+    const lx = letterOf(x), ly = letterOf(y);
+    return !!lx && !!ly && lx === ly;
+  };
   const getImpStyles = (imp?: string) => {
     if (!imp) return { bg: 'bg-gray-50', text: 'text-gray-400', label: '基础演练' };
     if (imp.includes('必考')) return { bg: 'bg-red-50 border border-red-200', text: 'text-red-500', label: '🔴 核心必考' };
@@ -34,7 +43,7 @@ export default function QuizCard({ question: q, answer, showResult, onAnswer, se
         <div className="space-y-2 pt-2">
           {q.options.map((opt) => {
             const isSelected = answer === opt;
-            const isCorrect = opt === q.answer;
+            const isCorrect = sameAnswer(opt, q.answer);
             let borderCls = 'border-gray-100 bg-gray-50/50 text-gray-700';
             if (showResult) {
               if (isCorrect) borderCls = 'border-green-500 bg-green-50 text-green-700 font-black shadow-sm shadow-green-200';
@@ -63,9 +72,9 @@ export default function QuizCard({ question: q, answer, showResult, onAnswer, se
       )}
       {showResult && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className={'rounded-2xl p-4 border text-xs leading-relaxed space-y-1.5 ' + (selfGrade ? 'bg-orange-50/40 border-orange-100' : answer === q.answer ? 'bg-green-50/40 border-green-100' : 'bg-red-50/40 border-red-100')}>
-          <div className={'font-black ' + (selfGrade ? 'text-orange-600' : answer === q.answer ? 'text-green-600' : 'text-red-500')}>
-            {selfGrade ? '📋 标准答案与解析，请对照自评：' + q.answer : answer === q.answer ? '✅ 精准契合！回答正确' : '❌ 回答错误，官方建议标准答案：' + q.answer}
+          className={'rounded-2xl p-4 border text-xs leading-relaxed space-y-1.5 ' + (selfGrade ? 'bg-orange-50/40 border-orange-100' : sameAnswer(answer, q.answer) ? 'bg-green-50/40 border-green-100' : 'bg-red-50/40 border-red-100')}>
+          <div className={'font-black ' + (selfGrade ? 'text-orange-600' : sameAnswer(answer, q.answer) ? 'text-green-600' : 'text-red-500')}>
+            {selfGrade ? '📋 标准答案与解析，请对照自评：' + q.answer : sameAnswer(answer, q.answer) ? '✅ 精准契合！回答正确' : '❌ 回答错误，官方建议标准答案：' + q.answer}
           </div>
           <p className="font-bold text-gray-500 pt-1">{'💡 考点穿透核心解析：'}</p>
           <p className="font-medium text-gray-400">{q.explanation}</p>
