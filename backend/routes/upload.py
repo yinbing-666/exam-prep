@@ -11,6 +11,8 @@ from routes.jobs import process_image_recognition, MAX_IMAGES_PER_FILE
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
+logger = logging.getLogger("upload")
+
 UPLOAD_DIR = "/tmp/exam-uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -43,11 +45,11 @@ def extract_images_from_pdf(filepath: str) -> list:
                         if len(image_bytes) > 1024:
                             images.append((page_num + 1, image_bytes, image_ext))
                 except Exception as e:
-                    print(f"图片提取跳过 xref={xref}: {e}")
+                    logger.warning("图片提取跳过 xref=%s: %s", xref, e)
                     continue
         doc.close()
     except Exception as e:
-        print(f"图片提取失败: {e}")
+        logger.warning("图片提取失败: %s", e)
     return images
 
 
@@ -62,18 +64,6 @@ def extract_text_from_pdf(filepath: str) -> tuple:
                 if text:
                     pages.append(text)
             return "\n\n---\n\n".join(pages), len(pdf.pages)
-    except ImportError:
-        try:
-            from PyPDF2 import PdfReader
-            reader = PdfReader(filepath)
-            pages = []
-            for page in reader.pages:
-                text = page.extract_text()
-                if text:
-                    pages.append(text)
-            return "\n\n---\n\n".join(pages), len(reader.pages)
-        except Exception as e:
-            return f"[PDF解析失败: {e}]", 0
     except Exception as e:
         return f"[PDF解析失败: {e}]", 0
 
@@ -208,7 +198,7 @@ async def upload_file(
         except FileNotFoundError:
             pass
         except OSError as exc:
-            logging.warning("Failed to remove temp file %s: %s", save_path, exc)
+            logger.warning("Failed to remove temp file %s: %s", save_path, exc)
 
     return {
         "id": uploaded.id,

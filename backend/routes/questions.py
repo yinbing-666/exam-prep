@@ -1,7 +1,7 @@
 """AI出题记录 API — 存储已出题目，防重复"""
 import uuid
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
@@ -193,7 +193,7 @@ def mark_reviewed(question_id: str, db: Session = Depends(get_db), user_id: str 
         raise HTTPException(404, "题目不存在")
 
     q.times_reviewed = (q.times_reviewed or 0) + 1
-    q.last_reviewed_at = datetime.utcnow()
+    q.last_reviewed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     return {"ok": True, "timesReviewed": q.times_reviewed}
 

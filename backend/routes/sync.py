@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -47,7 +47,7 @@ def push_data(req: PushReq, user_id: str = Depends(get_current_user_id), db: Ses
 
     synced = 0
     skipped = 0
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     for item in req.items:
         existing = db.query(UserSync).filter(
             UserSync.user_id == user_id,

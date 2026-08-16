@@ -1,7 +1,7 @@
 """认证模块 — 注册/登录/Token验证"""
 
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException
@@ -29,7 +29,8 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_token(user_id: str) -> str:
-    expire = datetime.utcnow() + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+    # naive UTC，与原 utcnow() 行为等价；jose 的 exp 经 utctimetuple 取 UTC 分量
+    expire = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
     return jwt.encode({"sub": user_id, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 

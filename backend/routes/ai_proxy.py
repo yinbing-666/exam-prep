@@ -1,7 +1,7 @@
 import os
 import json
 import time
-from collections import defaultdict, deque
+from collections import deque
 from threading import Lock
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -23,7 +23,7 @@ MAX_BODY_BYTES = 256 * 1024
 MAX_MESSAGES = 50
 MAX_MESSAGE_BYTES = 128 * 1024
 MAX_TOKENS = 4096
-_request_times: dict[str, deque[float]] = defaultdict(deque)
+_request_times: dict[str, deque[float]] = {}
 _rate_lock = Lock()
 
 
@@ -37,12 +37,18 @@ class ChatReq(BaseModel):
 def _check_rate_limit(key: str) -> None:
     now = time.monotonic()
     with _rate_lock:
-        timestamps = _request_times[key]
-        while timestamps and now - timestamps[0] >= RATE_WINDOW_SECONDS:
-            timestamps.popleft()
-        if len(timestamps) >= RATE_LIMIT:
+        timestamps = _request_times.get(key)
+        if timestamps is not None:
+            # 清理窗口外的过期记录
+            while timestamps and now - timestamps[0] >= RATE_WINDOW_SECONDS:
+                timestamps.popleft()
+            # 清理后为空则移除该 key，避免不活跃用户残留空 deque 导致字典无限增长
+            if not timestamps:
+                del _request_times[key]
+                timestamps = None
+        if timestamps is not None and len(timestamps) >= RATE_LIMIT:
             raise HTTPException(429, "请求过于频繁，请稍后再试")
-        timestamps.append(now)
+        _request_times.setdefault(key, deque()).append(now)
 
 
 @router.post("/chat")
@@ -91,5 +97,6 @@ async def chat(request: Request, user_id: str = Depends(get_current_user_id)):
             },
         )
         if resp.status_code != 200:
-            raise HTTPException(resp.status_code, resp.text)
+            # 不透传上游响应体，避免泄露上游 API 细节；保留状态码供客户端判断
+            raise HTTPException(resp.status_code, "AI 服务暂时不可用，请稍后再试")
         return resp.json()

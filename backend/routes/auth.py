@@ -33,6 +33,10 @@ class LoginReq(BaseModel):
 
 @router.post("/register")
 async def register(req: RegisterReq, db: Session = Depends(get_db)):
+    # 0. 密码强度校验（最小要求：长度≥8）
+    if len(req.password) < 8:
+        raise HTTPException(400, "密码长度至少 8 位")
+
     # 1. 人机验证
     if captcha_enabled("register"):
         if not all((req.captcha_output, req.gen_time, req.lot_number, req.pass_token)):
