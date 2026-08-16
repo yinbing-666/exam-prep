@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { getProfile, getAchievements } from '../stores/gamification';
 import { getAllDailyPlans } from '../stores/dailyPlans';
-import { getSubjects, type Subject } from '../utils/subjects';
+import { getDisplaySubjects, type DisplaySubject } from '../stores/subjects';
 import { calculateReadiness, type ReadinessData } from '../utils/readiness';
 import { countDueCards } from '../utils/fsrs-service';
 import { DEFAULT_PROFILE, type UserProfile } from '../types/gamification';
@@ -87,26 +87,27 @@ export default function Plan() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile>({ ...DEFAULT_PROFILE });
   const [plans, setPlans] = useState<DailyPlan[]>([]);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<DisplaySubject[]>([]);
   const [readiness, setReadiness] = useState<ReadinessData | null>(null);
   const [dueCount, setDueCount] = useState(0);
   const [achievementCount, setAchievementCount] = useState(0);
 
   useEffect(() => {
     async function load() {
-      const [p, dailyPlans, ready, due, achievements] = await Promise.all([
+      const [p, dailyPlans, ready, due, achievements, subjectList] = await Promise.all([
         getProfile(),
         getAllDailyPlans(),
         calculateReadiness(),
         countDueCards(),
         getAchievements(),
+        getDisplaySubjects(),
       ]);
       setProfile(p);
       setPlans(dailyPlans);
       setReadiness(ready);
       setDueCount(due);
       setAchievementCount(achievements.filter(a => a.unlocked).length);
-      setSubjects(getSubjects());
+      setSubjects(subjectList);
     }
     load();
   }, []);

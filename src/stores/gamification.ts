@@ -22,13 +22,9 @@ export async function getProfile(): Promise<UserProfile> {
 
 // 保存用户资料
 export async function saveProfile(profile: UserProfile): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  tx.objectStore(STORE_NAME).put({ ...profile, id: 'profile' });
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { schedulePush('gamification'); resolve(); };
-    tx.onerror = () => reject(tx.error);
-  });
+  // 走 db.put 统一维护 updatedAt 和同步脏标记
+  await put(STORE_NAME, { ...profile, id: 'profile' });
+  schedulePush('gamification');
 }
 
 // 获取成就列表
@@ -48,13 +44,9 @@ export async function getAchievements(): Promise<Achievement[]> {
 
 // 保存成就列表
 export async function saveAchievements(achievements: Achievement[]): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  tx.objectStore(STORE_NAME).put({ id: 'achievements', data: achievements });
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => { schedulePush('gamification'); resolve(); };
-    tx.onerror = () => reject(tx.error);
-  });
+  // 走 db.put 统一维护 updatedAt 和同步脏标记
+  await put(STORE_NAME, { id: 'achievements', data: achievements });
+  schedulePush('gamification');
 }
 
 // 增加XP并处理升级

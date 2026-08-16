@@ -2,7 +2,7 @@
 import { useNavigate } from 'react-router-dom';
 import { getProfile, getAchievements, updateStreak } from '../stores/gamification';
 import { getAllDailyPlans, getAllStudySets, getResults } from '../stores';
-import { getSubjects, type Subject } from '../utils/subjects';
+import { getDisplaySubjects, type DisplaySubject } from '../stores/subjects';
 import { ACHIEVEMENTS, DEFAULT_PROFILE, type Achievement, type UserProfile } from '../types/gamification';
 import type { DailyPlan, QuizResult, StudySet } from '../types';
 import {
@@ -39,7 +39,7 @@ function greeting() {
   return '晚上好，稳住节奏！';
 }
 
-function calcSubjectStats(subject: Subject, sets: StudySet[], results: QuizResult[]) {
+function calcSubjectStats(subject: DisplaySubject, sets: StudySet[], results: QuizResult[]) {
   const subjectSets = sets.filter(set => set.subject === subject.name || set.subject === subject.id);
   const questionIds = new Set(subjectSets.flatMap(set => set.questions.map(q => q.id)));
   const subjectResults = results.filter(result => questionIds.has(result.questionId));
@@ -57,19 +57,20 @@ export default function Home() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile>({ ...DEFAULT_PROFILE });
   const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS.map(item => ({ ...item })));
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<DisplaySubject[]>([]);
   const [plans, setPlans] = useState<DailyPlan[]>([]);
   const [sets, setSets] = useState<StudySet[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
 
   useEffect(() => {
     async function load() {
-      const [p, a, dailyPlans, studySets, quizResults] = await Promise.all([
+      const [p, a, dailyPlans, studySets, quizResults, subjectList] = await Promise.all([
         getProfile(),
         getAchievements(),
         getAllDailyPlans(),
         getAllStudySets(),
         getResults(),
+        getDisplaySubjects(),
       ]);
       try {
         await updateStreak();
@@ -81,7 +82,7 @@ export default function Home() {
       setPlans(dailyPlans);
       setSets(studySets);
       setResults(quizResults);
-      setSubjects(getSubjects());
+      setSubjects(subjectList);
     }
     load();
   }, []);

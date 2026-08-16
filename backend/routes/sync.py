@@ -18,6 +18,7 @@ VALID_STORES = [
 
 class SyncItem(BaseModel):
     item_id: str
+    # 记录级更新时间戳（epoch ms）由 data.updatedAt 携带，用于按记录合并
     data: dict
 
 
@@ -31,12 +32,22 @@ class PullReq(BaseModel):
     since: str | None = None  # ISO datetime, 拉取此时间之后的变更
 
 
+def _client_ts(data: dict) -> float | None:
+    """从记录 data 中取客户端维护的更新时间戳（epoch ms），缺失返回 None"""
+    ts = data.get("updatedAt")
+    if isinstance(ts, (int, float)) and not isinstance(ts, bool):
+        return float(ts)
+    return None
+
+
 @router.post("/push")
 def push_data(req: PushReq, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     if req.store_name not in VALID_STORES:
         raise HTTPException(400, f"Invalid store: {req.store_name}")
 
-    count = 0
+    synced = 0
+    skipped = 0
+    now = datetime.utcnow()
     for item in req.items:
         existing = db.query(UserSync).filter(
             UserSync.user_id == user_id,
@@ -45,8 +56,22 @@ def push_data(req: PushReq, user_id: str = Depends(get_current_user_id), db: Ses
         ).first()
 
         if existing:
+            # 按 updated_at 大者胜出合并：客户端时间戳更旧时不覆盖服务器上的新版本
+            try:
+                existing_data = json.loads(existing.data)
+            except (json.JSONDecodeError, TypeError):
+                existing_data = {}
+            incoming_ts = _client_ts(item.data)
+            existing_ts = _client_ts(existing_data)
+            if (
+                incoming_ts is not None
+                and existing_ts is not None
+                and incoming_ts < existing_ts
+            ):
+                skipped += 1
+                continue
             existing.data = json.dumps(item.data, ensure_ascii=False)
-            existing.updated_at = datetime.utcnow()
+            existing.updated_at = now
         else:
             db.add(UserSync(
                 user_id=user_id,
@@ -54,14 +79,24 @@ def push_data(req: PushReq, user_id: str = Depends(get_current_user_id), db: Ses
                 item_id=item.item_id,
                 data=json.dumps(item.data, ensure_ascii=False),
             ))
-        count += 1
+        synced += 1
 
     db.commit()
-    return {"synced": count}
+    return {"synced": synced, "skipped": skipped}
 
 
 @router.post("/pull")
 def pull_data(req: PullReq, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    # since 是 ISO 字符串，需解析为 datetime 再与 DateTime 列比较
+    since_dt = None
+    if req.since:
+        try:
+            since_dt = datetime.fromisoformat(req.since.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(400, "since 必须是合法的 ISO datetime")
+        if since_dt.tzinfo is not None:
+            since_dt = since_dt.replace(tzinfo=None)
+
     result = {}
     for store_name in req.store_names:
         if store_name not in VALID_STORES:
@@ -70,8 +105,8 @@ def pull_data(req: PullReq, user_id: str = Depends(get_current_user_id), db: Ses
             UserSync.user_id == user_id,
             UserSync.store_name == store_name,
         )
-        if req.since:
-            query = query.filter(UserSync.updated_at > req.since)
+        if since_dt is not None:
+            query = query.filter(UserSync.updated_at > since_dt)
 
         rows = query.all()
         result[store_name] = [

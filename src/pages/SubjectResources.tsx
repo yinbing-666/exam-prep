@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { fetchSubjectDetail, type BackendSubject } from '../api/subjects';
+import { fetchSubjectDetail, type BackendSubject } from '../stores/subjects';
 import { getToken } from '../stores/auth';
 import { GameIcon } from '../components/SharedUI';
 

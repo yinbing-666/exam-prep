@@ -13,11 +13,14 @@ from routes.ai_proxy import router as ai_router
 from routes.subjects import router as subjects_router
 from routes.upload import router as upload_router
 from routes.questions import router as questions_router
-from routes.jobs import router as jobs_router
+from routes.jobs import router as jobs_router, fail_stale_jobs
 from geetest import router as geetest_router
 
 # 创建表
 Base.metadata.create_all(bind=engine)
+
+# 服务重启后，把上次运行中断遗留的 pending/running 任务置为 failed
+fail_stale_jobs()
 
 app = FastAPI(title="逢考必过 API", version="1.0.0")
 

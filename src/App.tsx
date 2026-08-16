@@ -13,7 +13,7 @@ import Stats from './pages/Stats';
 import Profile from './pages/Profile';
 import { GameIcon } from './components/SharedUI';
 import { isLoggedIn, logout } from './stores/auth';
-import { syncPull } from './stores/sync';
+import { syncAll } from './stores/sync';
 
 // 3D 微动效 Tab 栏
 function TabBar() {
@@ -85,7 +85,7 @@ function App() {
     const loggedIn = isLoggedIn();
     setIsLoggedInState(loggedIn);
     if (loggedIn) {
-      syncPull();
+      syncAll();
     }
   }, []);
 

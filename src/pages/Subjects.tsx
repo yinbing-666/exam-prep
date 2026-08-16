@@ -8,6 +8,7 @@ import {
   uploadFile,
   type Subject,
 } from '../stores/subjects';
+import { isLoggedIn } from '../stores/auth';
 
 const ICONS = ['📚', '💻', '⚛️', '🔬', '📐', '🎨', '🌍', '📊', '🧬', '⚡', '🎵', '📖'];
 const COLORS = ['#f97316', '#3b82f6', '#10b981', '#8b5cf6', '#ef4444', '#06b6d4', '#f59e0b', '#ec4899'];
@@ -38,8 +39,7 @@ const Subjects: React.FC = () => {
 
   async function loadSubjects() {
     try {
-      const token = localStorage.getItem('exam_token');
-      if (!token) {
+      if (!isLoggedIn()) {
         navigate('/login');
         return;
       }
@@ -89,8 +89,11 @@ const Subjects: React.FC = () => {
       const data = await uploadFile(file, uploadingSubjectId);
       
       let msg = `✅ 上传成功！提取了 ${data.charCount} 个字符`;
-      if (data.imageCount > 0) {
-        msg += `，识别了 ${data.imageCount} 张图片`;
+      if (data.imageCount && data.imageCount > 0) {
+        msg += `，${data.imageCount} 张图片将在后台识别`;
+      }
+      if (data.imageSkipped && data.imageSkipped > 0) {
+        msg += `（${data.imageSkipped} 张超出上限已跳过）`;
       }
       alert(msg);
       loadSubjects(); // 刷新统计数据
@@ -543,7 +546,7 @@ const Subjects: React.FC = () => {
               {uploadStatus || '正在上传...'}
             </motion.p>
             <p style={{ color: '#fff', fontSize: '0.8rem', opacity: 0.8, marginTop: 8, textAlign: 'center', padding: '0 20px' }}>
-              PDF中的图片将自动识别，请耐心等待
+              文本提取完成后即可出题，PDF 中的图片将在后台自动识别
             </p>
           </motion.div>
         )}

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
 from database import get_db
-from models import Subject
+from models import Subject, UploadedFile, AIGeneratedQuestion, ProcessingJob
 from auth import get_current_user_id
 
 router = APIRouter(prefix="/api/subjects", tags=["subjects"])
@@ -123,6 +123,16 @@ def delete_subject(subject_id: str, db: Session = Depends(get_db), user_id: str 
     subject = db.query(Subject).filter(Subject.id == subject_id, Subject.user_id == user_id).first()
     if not subject:
         raise HTTPException(404, "科目不存在")
+    # 级联删除该科目下的文件、出题记录和异步任务，避免残留孤儿数据
+    db.query(UploadedFile).filter(
+        UploadedFile.subject_id == subject_id, UploadedFile.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(AIGeneratedQuestion).filter(
+        AIGeneratedQuestion.subject_id == subject_id, AIGeneratedQuestion.user_id == user_id
+    ).delete(synchronize_session=False)
+    db.query(ProcessingJob).filter(
+        ProcessingJob.subject_id == subject_id, ProcessingJob.user_id == user_id
+    ).delete(synchronize_session=False)
     db.delete(subject)
     db.commit()
     return {"ok": True}

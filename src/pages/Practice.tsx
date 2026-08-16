@@ -3,7 +3,8 @@ import { Routes, Route, useNavigate } from 'react-router-dom';
 import { getProfile } from '../stores/gamification';
 import { getAllStudySets, getResults, getWrongQuestions, saveStudySet, saveResult, getSubjectFiles } from '../stores';
 import { countDueCards, trackQuiz } from '../utils/fsrs-service';
-import { addSubject, getSubjects, type Subject } from '../utils/subjects';
+import { createSubject, getDisplaySubjects, type DisplaySubject } from '../stores/subjects';
+import { setSubjectPrefs } from '../utils/subjects';
 import type { UserProfile } from '../types/gamification';
 import type { Question, QuizResult, StudySet } from '../types';
 import {
@@ -47,7 +48,7 @@ function subjectIcon(name: string) {
   return 'book';
 }
 
-function subjectStats(subject: Subject, sets: StudySet[], results: QuizResult[]) {
+function subjectStats(subject: DisplaySubject, sets: StudySet[], results: QuizResult[]) {
   const subjectSets = sets.filter(set => set.subject === subject.name || set.subject === subject.id);
   const ids = new Set(subjectSets.flatMap(set => set.questions.map(q => q.id)));
   const subjectResults = results.filter(result => ids.has(result.questionId));
@@ -64,7 +65,7 @@ function subjectStats(subject: Subject, sets: StudySet[], results: QuizResult[])
 function PracticeMain() {
   const navigate = useNavigate();
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<DisplaySubject[]>([]);
   const [sets, setSets] = useState<StudySet[]>([]);
   const [results, setResults] = useState<QuizResult[]>([]);
   const [dueCount, setDueCount] = useState(0);
@@ -72,19 +73,20 @@ function PracticeMain() {
 
   useEffect(() => {
     async function load() {
-      const [p, studySets, quizResults, due, wrong] = await Promise.all([
+      const [p, studySets, quizResults, due, wrong, subjectList] = await Promise.all([
         getProfile(),
         getAllStudySets(),
         getResults(),
         countDueCards(),
         getWrongQuestions(),
+        getDisplaySubjects(),
       ]);
       setProfile(p);
       setSets(studySets);
       setResults(quizResults);
       setDueCount(due);
       setWrongCount(wrong.length);
-      setSubjects(getSubjects());
+      setSubjects(subjectList);
     }
     load();
   }, []);
@@ -242,12 +244,30 @@ function NewSubject() {
   const [name, setName] = useState('');
   const [examDate, setExamDate] = useState('');
   const [dailyMinutes, setDailyMinutes] = useState(45);
-  const canSubmit = name.trim() && examDate;
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState('');
+  const canSubmit = name.trim() && examDate && !creating;
 
-  function submit() {
+  async function submit() {
     if (!canSubmit) return;
-    addSubject(name.trim(), examDate, dailyMinutes);
-    navigate('/practice');
+    setCreating(true);
+    setError('');
+    try {
+      // 科目统一存后端（唯一数据源），考试日期/每日时长作为本地偏好
+      const created = await createSubject({
+        name: name.trim(),
+        fullName: '',
+        icon: '📚',
+        color: '#f97316',
+        questionTypes: ['选择', '判断', '简答'],
+        examStyle: '',
+      });
+      setSubjectPrefs(created.id, { examDate, dailyMinutes }, created.name);
+      navigate('/practice');
+    } catch (e: any) {
+      setError(e.message || '创建科目失败，请先登录');
+      setCreating(false);
+    }
   }
 
   const tomorrow = useMemo(() => {
@@ -276,7 +296,12 @@ function NewSubject() {
             </div>
             <input type="range" min={15} max={180} step={15} value={dailyMinutes} onChange={e => setDailyMinutes(Number(e.target.value))} className="mt-3 w-full accent-orange-500" />
           </label>
-          <OrangeButton className="w-full py-4 text-base disabled:opacity-50" onClick={submit}>创建科目</OrangeButton>
+          {error && (
+            <div className="rounded-2xl bg-red-50 px-4 py-3 text-sm font-bold text-red-600">{error}</div>
+          )}
+          <OrangeButton className="w-full py-4 text-base disabled:opacity-50" disabled={creating} onClick={submit}>
+            {creating ? '⏳ 创建中...' : '创建科目'}
+          </OrangeButton>
         </Card>
       </div>
     </PageShell>

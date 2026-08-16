@@ -44,6 +44,7 @@ class ProcessingJob(Base):
 class UserSync(Base):
     """每个用户的同步数据"""
     __tablename__ = "user_sync"
+    __table_args__ = {"sqlite_autoincrement": True}
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String, index=True, nullable=False)
@@ -51,11 +52,6 @@ class UserSync(Base):
     item_id = Column(String, nullable=False)
     data = Column(Text, nullable=False)
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
-
-    class Config:
-        __table_args__ = (
-            {"sqlite_autoincrement": True},
-        )
 
 
 class AICallLog(Base):

@@ -1,8 +1,8 @@
-// 科目选择器组件 — 从后端获取科目配置并选择
+// 科目选择器组件 — 从后端获取科目配置并选择（后端为唯一数据源）
 
 import { useState, useEffect } from 'react';
-import { fetchSubjects, toSubjectConfig, type BackendSubject } from '../api/subjects';
-import { getActiveSubject, getSubjects } from '../utils/subjects';
+import { getAllSubjects, toSubjectConfig, type BackendSubject } from '../stores/subjects';
+import { getActiveSubjectId, setActiveSubjectId, getLegacySubjectNames } from '../utils/subjects';
 import type { SubjectConfig } from '../ai/prompts';
 
 interface SubjectSelectorProps {
@@ -16,10 +16,6 @@ export default function SubjectSelector({ onSubjectChange, compact }: SubjectSel
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // 本地科目作为兜底
-  const localSubjects = getSubjects();
-  const activeSubject = getActiveSubject();
-
   useEffect(() => {
     loadSubjects();
   }, []);
@@ -28,26 +24,21 @@ export default function SubjectSelector({ onSubjectChange, compact }: SubjectSel
     setLoading(true);
     setError('');
     try {
-      const subjects = await fetchSubjects();
+      const subjects = await getAllSubjects();
       if (subjects.length > 0) {
         setBackendSubjects(subjects);
-        // 默认选中活跃科目对应的后端科目，或第一个
-        const activeName = activeSubject?.name || '';
-        const match = subjects.find(s => s.name === activeName || s.id === activeName);
-        const defaultId = match?.id || subjects[0].id;
-        setSelectedId(defaultId);
-        const selected = subjects.find(s => s.id === defaultId);
-        if (selected) {
-          onSubjectChange(toSubjectConfig(selected), selected.name, selected.id);
-        }
+        // 默认选中上次活跃的后端科目，否则第一个
+        const activeId = getActiveSubjectId();
+        const defaultId = subjects.find(s => s.id === activeId)?.id || subjects[0].id;
+        applySelection(subjects, defaultId);
       } else {
-        // 后端无科目，用本地科目名称
-        const name = activeSubject?.name || localSubjects[0]?.name || '本课程';
+        // 后端无科目，仅展示旧版本地科目名兜底
+        const name = getLegacySubjectNames()[0] || '本课程';
         onSubjectChange(undefined, name);
       }
     } catch {
-      // 后端不可用，降级到本地科目
-      const name = activeSubject?.name || localSubjects[0]?.name || '本课程';
+      // 后端不可用，降级到旧版本地科目名
+      const name = getLegacySubjectNames()[0] || '本课程';
       onSubjectChange(undefined, name);
       setError('无法连接后端，使用本地科目');
     } finally {
@@ -55,17 +46,22 @@ export default function SubjectSelector({ onSubjectChange, compact }: SubjectSel
     }
   }
 
-  function handleSelect(id: string) {
+  function applySelection(subjects: BackendSubject[], id: string) {
     setSelectedId(id);
-    const subject = backendSubjects.find(s => s.id === id);
-    if (subject) {
-      onSubjectChange(toSubjectConfig(subject), subject.name, subject.id);
+    setActiveSubjectId(id);
+    const selected = subjects.find(s => s.id === id);
+    if (selected) {
+      onSubjectChange(toSubjectConfig(selected), selected.name, selected.id);
     }
+  }
+
+  function handleSelect(id: string) {
+    applySelection(backendSubjects, id);
   }
 
   // 如果后端没有科目，只显示本地科目名
   if (backendSubjects.length === 0 && !loading) {
-    const name = activeSubject?.name || localSubjects[0]?.name || '本课程';
+    const name = getLegacySubjectNames()[0] || '本课程';
     return (
       <div className={compact ? '' : 'mb-4'}>
         <div className="flex items-center gap-2 rounded-2xl border border-orange-100 bg-orange-50/30 px-4 py-3">

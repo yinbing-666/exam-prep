@@ -1,11 +1,15 @@
 // 科目API管理
-// 职责：封装 /api/subjects 和 /api/upload 的后端调用
+// 职责：封装 /api/subjects 和 /api/upload 的后端调用（唯一数据源），
+// 并把后端科目与本地偏好（考试日期/每日学习时长，见 utils/subjects）合并成展示层数据
+
+import { getToken } from './auth';
+import type { SubjectConfig } from '../ai/prompts';
+import { getSubjectPrefs } from '../utils/subjects';
 
 const API_BASE = '/api';
-const TOKEN_KEY='exam_token';
 
 function getHeaders(): Record<string, string> {
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = getToken();
   const headers: Record<string, string> = {};
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -52,7 +56,64 @@ export interface UpdateSubjectPayload {
 
 export interface UploadResponse {
   charCount: number;
+  imageCount?: number;
+  imageSkipped?: number;
   [key: string]: any;
+}
+
+/** 后端返回的科目对象（同 Subject，语义化别名） */
+export type BackendSubject = Subject;
+
+/** 展示层科目：后端科目 + 本地偏好（examDate/dailyMinutes），供首页/计划/练习页使用 */
+export interface DisplaySubject {
+  id: string;
+  name: string;
+  color: string;
+  icon: string;
+  examDate: string;        // 本地偏好，空串表示未设置
+  dailyMinutes: number;    // 本地偏好
+}
+
+/** 拉取后端科目并合并本地偏好；后端不可用时返回空数组（页面显示空态） */
+export async function getDisplaySubjects(): Promise<DisplaySubject[]> {
+  try {
+    const subjects = await getAllSubjects();
+    return subjects.map(s => ({
+      id: s.id,
+      name: s.name,
+      color: s.color || '#f97316',
+      icon: s.icon || '📚',
+      ...getSubjectPrefs(s.id, s.name),
+    }));
+  } catch (e) {
+    console.warn('获取科目列表失败:', e);
+    return [];
+  }
+}
+
+/** 获取单个科目详情 */
+export async function fetchSubjectDetail(subjectId: string): Promise<BackendSubject> {
+  const res = await fetch(`${API_BASE}/subjects/${subjectId}`, {
+    headers: getHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || err.message || '获取科目详情失败');
+  }
+  return res.json();
+}
+
+/** 将后端科目转换为 SubjectConfig 供 Prompt 使用 */
+export function toSubjectConfig(subject: BackendSubject): SubjectConfig {
+  return {
+    name: subject.name,
+    fullName: subject.fullName,
+    questionTypes: subject.questionTypes,
+    examStyle: subject.examStyle,
+    difficulty: subject.difficulty,
+    examReference: subject.examReference,
+    specialRequirements: subject.specialRequirements,
+  };
 }
 
 // ---- API Functions ----

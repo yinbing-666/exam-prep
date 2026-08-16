@@ -1,61 +1,52 @@
-// 多科目管理工具
+// 科目本地偏好读写
+// 科目列表已统一由后端 API 提供（stores/subjects），这里只负责：
+// 1. 以后端科目 id 为 key 的本地偏好（考试日期、每日学习时长）
+// 2. 活跃科目 id 的记忆
+// 3. 旧版本地科目数据的一次性迁移（按科目名匹配，旧数据保留不删）
 
 export interface Subject {
   id: string;
-  name: string;           // 如 "微机原理"
+  name: string;
   examDate: string;        // YYYY-MM-DD
   dailyMinutes: number;
   color: string;           // 标识色
   createdAt: number;
 }
 
-const STORAGE_KEY = 'exam-prep-subjects';
-const ACTIVE_KEY = 'exam-prep-active-subject';
+export interface SubjectPrefs {
+  examDate: string;        // YYYY-MM-DD，空串表示未设置
+  dailyMinutes: number;
+}
 
-// 预设颜色
-const COLORS = ['#e07030', '#1976d2', '#43a047', '#8e24aa', '#d32f2f', '#00897b', '#5c6bc0', '#f4511e'];
+export const DEFAULT_PREFS: SubjectPrefs = { examDate: '', dailyMinutes: 45 };
 
-export function getSubjects(): Subject[] {
+const PREFS_KEY = 'exam-prep-subject-prefs';      // { [后端科目id 或 旧科目名]: SubjectPrefs }
+const ACTIVE_KEY = 'exam-prep-active-subject';    // 现在保存后端科目 id
+const LEGACY_KEY = 'exam-prep-subjects';          // 旧版本地科目数组，迁移后保留
+const MIGRATED_KEY = 'exam-prep-subject-prefs-migrated';
+
+function readPrefsMap(): Record<string, SubjectPrefs> {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
-  } catch { return []; }
+    return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+  } catch { return {}; }
 }
 
-export function saveSubjects(subjects: Subject[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(subjects));
+function writePrefsMap(map: Record<string, SubjectPrefs>): void {
+  localStorage.setItem(PREFS_KEY, JSON.stringify(map));
 }
 
-export function addSubject(name: string, examDate: string, dailyMinutes: number): Subject {
-  const subjects = getSubjects();
-  const color = COLORS[subjects.length % COLORS.length];
-  const subject: Subject = {
-    id: `subj-${Date.now()}`,
-    name,
-    examDate,
-    dailyMinutes,
-    color,
-    createdAt: Date.now(),
-  };
-  subjects.push(subject);
-  saveSubjects(subjects);
-  return subject;
+/** 取科目偏好：先按后端科目 id，再按科目名（迁移数据），都没有则返回默认值 */
+export function getSubjectPrefs(subjectId: string, subjectName: string): SubjectPrefs {
+  const map = readPrefsMap();
+  return map[subjectId] || map[subjectName] || { ...DEFAULT_PREFS };
 }
 
-export function updateSubject(id: string, updates: Partial<Omit<Subject, 'id' | 'createdAt'>>): void {
-  const subjects = getSubjects();
-  const idx = subjects.findIndex(s => s.id === id);
-  if (idx >= 0) {
-    subjects[idx] = { ...subjects[idx], ...updates };
-    saveSubjects(subjects);
-  }
-}
-
-export function deleteSubject(id: string): void {
-  const subjects = getSubjects().filter(s => s.id !== id);
-  saveSubjects(subjects);
-  if (getActiveSubjectId() === id) {
-    setActiveSubjectId(subjects[0]?.id || '');
-  }
+/** 写科目偏好（以后端科目 id 为 key；传入科目名时顺带清理同名旧 key） */
+export function setSubjectPrefs(subjectId: string, prefs: SubjectPrefs, subjectName?: string): void {
+  const map = readPrefsMap();
+  if (subjectName) delete map[subjectName];
+  map[subjectId] = prefs;
+  writePrefsMap(map);
 }
 
 export function getActiveSubjectId(): string {
@@ -66,23 +57,32 @@ export function setActiveSubjectId(id: string): void {
   localStorage.setItem(ACTIVE_KEY, id);
 }
 
-export function getActiveSubject(): Subject | null {
-  const id = getActiveSubjectId();
-  const subjects = getSubjects();
-  return subjects.find(s => s.id === id) || subjects[0] || null;
+/** 旧版本地科目名列表（后端不可用时的兜底展示） */
+export function getLegacySubjectNames(): string[] {
+  try {
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || '[]');
+    return Array.isArray(legacy) ? legacy.map((s: Subject) => s.name) : [];
+  } catch { return []; }
 }
 
-// 迁移旧数据（单科目 → 多科目）
-export function migrateFromLegacy(): void {
-  const subjects = getSubjects();
-  if (subjects.length > 0) return; // 已有数据不迁移
-
+/** 一次性迁移：把旧版本地科目（exam-prep-subjects）的考试日期/学习时长
+ *  转成按科目名 key 的偏好映射，读取时通过 getSubjectPrefs(name) 命中。旧数据保留。 */
+export function migrateLegacySubjectPrefs(): void {
+  if (localStorage.getItem(MIGRATED_KEY)) return;
   try {
-    const legacy = JSON.parse(localStorage.getItem('exam-prep-project') || 'null');
-    if (legacy && legacy.subject) {
-      const subj = addSubject(legacy.subject, legacy.examDate, legacy.dailyMinutes);
-      setActiveSubjectId(subj.id);
-      localStorage.removeItem('exam-prep-project');
+    const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY) || '[]');
+    if (Array.isArray(legacy) && legacy.length > 0) {
+      const map = readPrefsMap();
+      for (const s of legacy) {
+        if (s && s.name && !map[s.name]) {
+          map[s.name] = {
+            examDate: s.examDate || '',
+            dailyMinutes: s.dailyMinutes || DEFAULT_PREFS.dailyMinutes,
+          };
+        }
+      }
+      writePrefsMap(map);
     }
-  } catch {}
+  } catch { /* 解析失败不迁移 */ }
+  localStorage.setItem(MIGRATED_KEY, '1');
 }

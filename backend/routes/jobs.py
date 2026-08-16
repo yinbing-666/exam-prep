@@ -2,15 +2,19 @@
 import uuid
 import json
 import re
+import os
+import base64
 import logging
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional, List
+import httpx
 from database import get_db
 from models import ProcessingJob, UploadedFile, Subject
 from auth import get_current_user_id
+from routes.ai_proxy import AI_API_KEY, AI_API_BASE, AI_MODEL
 
 logger = logging.getLogger("jobs")
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -146,6 +150,35 @@ async def delete_job(
 # 后台处理函数
 # ============================================================
 
+# 每个文件最多识别的图片数，超出部分跳过（每张 AI 识别最长约 60s，无上限会把上传请求挂死）
+MAX_IMAGES_PER_FILE = 20
+
+
+def fail_stale_jobs():
+    """服务启动时把上次运行中断遗留的 pending/running 任务置为 failed，避免前端无限轮询"""
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        stale = db.query(ProcessingJob).filter(
+            ProcessingJob.status.in_(["pending", "processing"])
+        ).all()
+        if not stale:
+            return
+        now = datetime.now()
+        for job in stale:
+            job.status = "failed"
+            job.error = "服务重启，任务中断，请重新发起"
+            job.completed_at = now
+        db.commit()
+        logger.info(f"[startup] 已将 {len(stale)} 个遗留 pending/running 任务置为 failed")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"[startup] 清理遗留任务失败: {e}")
+    finally:
+        db.close()
+
+
 def _extract_json_array(text: str) -> list:
     """从 AI 响应中健壮地提取 JSON 数组"""
     # 尝试直接解析
@@ -183,7 +216,6 @@ def _extract_json_array(text: str) -> list:
 async def process_job(job_id: str, job_type: str, subject_id: str, file_ids: list, config: dict):
     """后台处理任务"""
     from database import SessionLocal
-    from routes.ai_proxy import AI_API_KEY, AI_API_BASE, AI_MODEL
 
     db = SessionLocal()
     job = None
@@ -322,3 +354,91 @@ async def call_ai_for_batch(job_type: str, content: str, config: dict, api_key: 
         if not choices:
             raise Exception("AI 返回空结果")
         return choices[0].get("message", {}).get("content", "")
+
+
+async def describe_image_with_ai(image_bytes: bytes, image_ext: str, page_num: int, subject_name: str) -> str:
+    """用AI视觉模型识别图片内容（科目名作为 prompt 参数，不再硬编码课程）"""
+    if not AI_API_KEY or not AI_API_BASE or not AI_MODEL:
+        return f"[图片{page_num}页: AI未配置]"
+
+    # 转base64
+    b64 = base64.b64encode(image_bytes).decode()
+    mime = "image/png" if image_ext == "png" else "image/jpeg"
+
+    try:
+        async with httpx.AsyncClient(timeout=60, limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)) as client:
+            resp = await client.post(
+                f"{AI_API_BASE}/chat/completions",
+                headers={"Authorization": f"Bearer {AI_API_KEY}"},
+                json={
+                    "model": AI_MODEL,
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": f"这是《{subject_name}》课件第{page_num}页的图片。请详细描述这张图的内容，包括：\n1. 图的类型（结构图/流程图/时序图/接线图/表格等）\n2. 图中的所有文字标注\n3. 图的结构和组成部分\n4. 这张图想表达的核心知识点\n\n请用中文回答，尽量详细，因为这些信息将用于生成学习笔记和考试题目。"
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{mime};base64,{b64}"
+                                    }
+                                }
+                            ]
+                        }
+                    ],
+                    "max_tokens": 1000,
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            else:
+                return f"[图片识别失败: HTTP {resp.status_code}]"
+    except Exception as e:
+        return f"[图片识别异常: {str(e)[:50]}]"
+
+
+async def process_image_recognition(file_id: str, subject_name: str, image_files: list):
+    """后台识别课件图片并追加到文件文本（上传接口只提取文本，图片识别在这里异步执行）
+
+    image_files: [(page_num, 图片文件路径), ...]，数量已在上传侧限制为 MAX_IMAGES_PER_FILE
+    """
+    from database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        descriptions = []
+        for page_num, img_path in image_files:
+            try:
+                with open(img_path, "rb") as f:
+                    img_bytes = f.read()
+                ext = os.path.splitext(img_path)[1].lstrip(".")
+                desc = await describe_image_with_ai(img_bytes, ext, page_num, subject_name)
+                if desc and not desc.startswith("["):
+                    descriptions.append(f"【第{page_num}页图片】\n{desc}")
+                    logger.info(f"[image-recognition] file={file_id} 第{page_num}页图片已识别")
+                else:
+                    logger.warning(f"[image-recognition] file={file_id} 第{page_num}页图片识别失败: {desc}")
+            except Exception as e:
+                logger.warning(f"[image-recognition] file={file_id} 读取图片 {img_path} 失败: {e}")
+
+        if descriptions:
+            uploaded = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+            if uploaded:
+                img_text = "\n\n=== 课件图片内容（AI识别）===\n\n" + "\n\n".join(descriptions)
+                uploaded.image_descriptions = img_text
+                uploaded.extracted_text = (uploaded.extracted_text or "") + img_text
+                uploaded.char_count = len(uploaded.extracted_text)
+                db.commit()
+    except Exception as e:
+        logger.error(f"[image-recognition] file={file_id} 后台识别失败: {e}", exc_info=True)
+    finally:
+        for _, img_path in image_files:
+            try:
+                os.remove(img_path)
+            except OSError:
+                pass
+        db.close()

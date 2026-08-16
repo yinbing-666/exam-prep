@@ -1,15 +1,13 @@
-"""文件上传解析 API — PDF/DOCX/TXT/MD → 提取文本 + 图片识别"""
+"""文件上传解析 API — PDF/DOCX/TXT/MD → 提取文本；图片识别作为后台任务执行"""
 import uuid
 import os
-import base64
-import json
 import logging
-import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
 from database import get_db
 from models import UploadedFile, Subject
 from auth import get_current_user_id
+from routes.jobs import process_image_recognition, MAX_IMAGES_PER_FILE
 
 router = APIRouter(prefix="/api/upload", tags=["upload"])
 
@@ -20,8 +18,6 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".txt", ".md"}
 
 # AI配置（从环境变量读取）
 AI_API_KEY = os.getenv("AI_API_KEY", "")
-AI_API_BASE = os.getenv("AI_API_BASE", "").rstrip("/")
-AI_MODEL = os.getenv("AI_MODEL", "")
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 UPLOAD_CHUNK_BYTES = 1024 * 1024
@@ -53,51 +49,6 @@ def extract_images_from_pdf(filepath: str) -> list:
     except Exception as e:
         print(f"图片提取失败: {e}")
     return images
-
-
-async def describe_image_with_ai(image_bytes: bytes, image_ext: str, page_num: int) -> str:
-    """用AI视觉模型识别图片内容"""
-    if not AI_API_KEY or not AI_API_BASE or not AI_MODEL:
-        return f"[图片{page_num}页: AI未配置]"
-    
-    # 转base64
-    b64 = base64.b64encode(image_bytes).decode()
-    mime = "image/png" if image_ext == "png" else "image/jpeg"
-    
-    try:
-        async with httpx.AsyncClient(timeout=60, limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)) as client:
-            resp = await client.post(
-                f"{AI_API_BASE}/chat/completions",
-                headers={"Authorization": f"Bearer {AI_API_KEY}"},
-                json={
-                    "model": AI_MODEL,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": f"这是微机原理课件第{page_num}页的图片。请详细描述这张图的内容，包括：\n1. 图的类型（结构图/流程图/时序图/接线图/表格等）\n2. 图中的所有文字标注\n3. 图的结构和组成部分\n4. 这张图想表达的核心知识点\n\n请用中文回答，尽量详细，因为这些信息将用于生成学习笔记和考试题目。"
-                                },
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:{mime};base64,{b64}"
-                                    }
-                                }
-                            ]
-                        }
-                    ],
-                    "max_tokens": 1000,
-                },
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            else:
-                return f"[图片识别失败: HTTP {resp.status_code}]"
-    except Exception as e:
-        return f"[图片识别异常: {str(e)[:50]}]"
 
 
 def extract_text_from_pdf(filepath: str) -> tuple:
@@ -155,6 +106,7 @@ def extract_text_from_txt(filepath: str) -> tuple:
 @router.post("")
 async def upload_file(
     request: Request,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     subject_id: str = Form(...),
     db: Session = Depends(get_db),
@@ -211,25 +163,19 @@ async def upload_file(
         if len(text) > MAX_CHARS:
             text = text[:MAX_CHARS] + f"\n\n[...截断，原文共{len(text)}字符]"
 
-        # 提取并识别PDF中的图片
-        image_descriptions = []
+        # 提取PDF图片并保存到临时文件，识别放到后台任务执行（不在请求内串行等 AI）
+        image_total = 0
+        image_queued = 0
+        image_files = []
         if ext == ".pdf" and AI_API_KEY:
             images = extract_images_from_pdf(save_path)
-            if images:
-                print(f"发现 {len(images)} 张图片，开始AI识别...")
-                for page_num, img_bytes, img_ext in images:
-                    desc = await describe_image_with_ai(img_bytes, img_ext, page_num)
-                    if desc and not desc.startswith("["):
-                        image_descriptions.append(f"【第{page_num}页图片】\n{desc}")
-                        print(f"  ✓ 第{page_num}页图片已识别")
-                    else:
-                        print(f"  ✗ 第{page_num}页图片识别失败: {desc}")
-
-        # 合并图片描述到文本
-        img_text = ""
-        if image_descriptions:
-            img_text = "\n\n=== 课件图片内容（AI识别）===\n\n" + "\n\n".join(image_descriptions)
-            text = text + img_text
+            image_total = len(images)
+            for idx, (page_num, img_bytes, img_ext) in enumerate(images[:MAX_IMAGES_PER_FILE]):
+                img_path = os.path.join(UPLOAD_DIR, f"{file_id}_img{idx}.{img_ext}")
+                with open(img_path, "wb") as f:
+                    f.write(img_bytes)
+                image_files.append((page_num, img_path))
+            image_queued = len(image_files)
 
         # 存入数据库
         uploaded = UploadedFile(
@@ -240,7 +186,7 @@ async def upload_file(
             file_type=ext.lstrip("."),
             file_size=file_size,
             extracted_text=text,
-            image_descriptions=img_text,
+            image_descriptions="",
             page_count=page_count,
             char_count=len(text),
         )
@@ -250,6 +196,12 @@ async def upload_file(
         subject.total_uploaded = (subject.total_uploaded or 0) + 1
         db.commit()
         db.refresh(uploaded)
+
+        # 图片识别作为后台 job 阶段执行，识别完成后追加到 extracted_text
+        if image_files:
+            background_tasks.add_task(
+                process_image_recognition, file_id, subject.name, image_files
+            )
     finally:
         try:
             os.remove(save_path)
@@ -265,7 +217,8 @@ async def upload_file(
         "fileSize": uploaded.file_size,
         "pageCount": uploaded.page_count,
         "charCount": uploaded.char_count,
-        "imageCount": len(image_descriptions),
+        "imageCount": image_queued,
+        "imageSkipped": max(0, image_total - image_queued),
         "textPreview": text[:500] + ("..." if len(text) > 500 else ""),
         "createdAt": str(uploaded.created_at) if uploaded.created_at else None,
     }
