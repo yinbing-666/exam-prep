@@ -378,7 +378,7 @@ export default function Plan() {
                     <p className="mt-1 text-xs font-bold text-gray-400">根据遗忘曲线安排复习</p>
                   </div>
                 </div>
-                <OrangeButton className="h-14 w-14 rounded-full text-3xl" onClick={() => navigate('/practice')}>→</OrangeButton>
+                <OrangeButton className="h-14 w-14 rounded-full text-3xl" onClick={() => navigate('/practice/fsrs')}>→</OrangeButton>
               </div>
               <div className="h-2 bg-gradient-to-r from-orange-400 via-yellow-400 to-green-400" />
             </Card>

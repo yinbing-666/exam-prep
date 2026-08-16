@@ -66,6 +66,10 @@ export async function createFsrsCard(
   back: string,
   questionId: string,
 ): Promise<FsrsCard> {
+  // 同一错题已有卡片时保留原卡（含 FSRS 调度进度），避免重复答错把进度清零
+  const existing = await getById<FsrsCard>('fsrsCards', questionId)
+  if (existing) return existing
+
   const now = new Date()
   const empty = createEmptyCard(now)
   const card: FsrsCard = cardFromTsFsrs(empty, front, back, questionId)
@@ -216,8 +220,16 @@ interface DailyRecord {
   minutes: number
 }
 
+// 本地时区的 YYYY-MM-DD（toISOString 会按 UTC 切日界，导致东八区晚 8 小时才换天）
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function getToday(): string {
-  return new Date().toISOString().slice(0, 10)
+  return toLocalDateStr(new Date())
 }
 
 /**
@@ -307,14 +319,15 @@ export function calculateStreak(): number {
       // Start from yesterday
       let checkDate = new Date()
       checkDate.setDate(checkDate.getDate() - 1)
-      const startDate = checkDate.toISOString().slice(0, 10)
+      const startDate = toLocalDateStr(checkDate)
 
       // If today doesn't count, start from today
       const effectiveStart = streak === 0 ? getToday() : startDate
 
-      let current = new Date(effectiveStart)
+      // 用本地日期分量逐天回溯，避免跨时区的 UTC 日界偏移
+      let [y, m, d] = effectiveStart.split('-').map(Number)
       for (let i = 0; i < 365; i++) {
-        const dateStr = current.toISOString().slice(0, 10)
+        const dateStr = `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
         const found = sorted.find(h => h.date === dateStr)
         if (found) {
           if (streak === 0 && i === 0 && rec.reviews > 0) streak = 1
@@ -323,7 +336,11 @@ export function calculateStreak(): number {
         } else {
           break
         }
-        current.setDate(current.getDate() - 1)
+        const prev = new Date(y, m - 1, d)
+        prev.setDate(prev.getDate() - 1)
+        y = prev.getFullYear()
+        m = prev.getMonth() + 1
+        d = prev.getDate()
       }
     }
   } catch { /* ignore */ }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getDueCards, countDueCards, reviewCard, getRetrievability } from '../utils/fsrs-service'
+import { getDueCards, countDueCards, reviewCard, getRetrievability, trackReview } from '../utils/fsrs-service'
 import type { FsrsCard } from '../utils/fsrs-service'
 
 interface Props {
@@ -35,6 +35,8 @@ export default function ReviewSession({ onBack }: Props) {
     if (!currentCard) return
     const retentionBefore = getRetrievability(currentCard)
     await reviewCard(currentCard.id, rating)
+    // 每复习一张卡计入每日挑战 / 连胜统计
+    trackReview(1)
     setResults(prev => [...prev, { cardId: currentCard.id, rating, retentionBefore }])
     if (index + 1 >= cards.length) {
       setFinished(true)

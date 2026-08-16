@@ -6,9 +6,13 @@ interface QuizCardProps {
   answer: string;
   showResult: boolean;
   onAnswer: (ans: string) => void;
+  /** 主观题自评模式：结果区改为「对照标准答案自评」，不预先判定对错 */
+  selfGrade?: boolean;
 }
 
-export default function QuizCard({ question: q, answer, showResult, onAnswer }: QuizCardProps) {
+export default function QuizCard({ question: q, answer, showResult, onAnswer, selfGrade }: QuizCardProps) {
+  // 有选项的题（选择/带选项判断）走选项作答；其余题型（简答/论述/程序/填空/计算/画图等）走文本作答
+  const isObjective = q.type === 'choice' || (q.type === 'judge' && !!q.options);
   const getImpStyles = (imp?: string) => {
     if (!imp) return { bg: 'bg-gray-50', text: 'text-gray-400', label: '基础演练' };
     if (imp.includes('必考')) return { bg: 'bg-red-50 border border-red-200', text: 'text-red-500', label: '🔴 核心必考' };
@@ -21,12 +25,12 @@ export default function QuizCard({ question: q, answer, showResult, onAnswer }: 
     <div className="bg-white rounded-[26px] p-5 border border-orange-50/60 shadow-[0_10px_25px_-5px_rgba(249,115,22,0.04)] space-y-4">
       <div className="flex justify-between items-center">
         <span className="text-[10px] font-black uppercase tracking-wider bg-orange-100 text-orange-700 px-2.5 py-0.5 rounded-md">
-          {q.type === 'choice' ? '单项选择' : q.type === 'judge' ? '概念判断' : '深度叙述'}
+          {q.type === 'choice' ? '单项选择' : q.type === 'judge' ? '概念判断' : q.type === 'programming' ? '程序设计' : q.type === 'fill' ? '概念填空' : q.type === 'calc' ? '计算推导' : q.type === 'draw' ? '图表绘制' : '深度叙述'}
         </span>
         <span className={'text-[9px] font-black px-2 py-0.5 rounded-md ' + currentImp.bg + ' ' + currentImp.text}>{currentImp.label}</span>
       </div>
       <h2 className="font-extrabold text-base text-gray-800 leading-relaxed pt-1">{q.question}</h2>
-      {(q.type === 'choice' || q.type === 'judge') && q.options && (
+      {isObjective && q.options && (
         <div className="space-y-2 pt-2">
           {q.options.map((opt) => {
             const isSelected = answer === opt;
@@ -50,19 +54,18 @@ export default function QuizCard({ question: q, answer, showResult, onAnswer }: 
           })}
         </div>
       )}
-      {(q.type === 'short' || q.type === 'essay') && !showResult && (
+      {!isObjective && !showResult && (
         <div className="space-y-3 pt-2">
           <textarea value={answer} onChange={e => onAnswer(e.target.value)}
-            placeholder={q.type === 'essay' ? '请在此层理清论证逻辑，写下你的核心得分要点...' : '请输入作答内容...'}
+            placeholder={q.type === 'essay' ? '请在此层理清论证逻辑，写下你的核心得分要点...' : q.type === 'programming' ? '请输入代码或关键实现步骤...' : '请输入作答内容...'}
             rows={4} className="w-full p-4 border border-orange-100 rounded-2xl text-xs font-medium bg-gray-50/40 focus:bg-white focus:outline-none focus:border-orange-400 transition-all resize-none" />
-          <button className="btn-3d-orange w-full py-2.5 rounded-xl text-xs" onClick={() => onAnswer(answer)}>{'提交本题答案'}</button>
         </div>
       )}
       {showResult && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-          className={'rounded-2xl p-4 border text-xs leading-relaxed space-y-1.5 ' + (answer === q.answer ? 'bg-green-50/40 border-green-100' : 'bg-red-50/40 border-red-100')}>
-          <div className={'font-black ' + (answer === q.answer ? 'text-green-600' : 'text-red-500')}>
-            {answer === q.answer ? '✅ 精准契合！回答正确' : '❌ 回答错误，官方建议标准答案：' + q.answer}
+          className={'rounded-2xl p-4 border text-xs leading-relaxed space-y-1.5 ' + (selfGrade ? 'bg-orange-50/40 border-orange-100' : answer === q.answer ? 'bg-green-50/40 border-green-100' : 'bg-red-50/40 border-red-100')}>
+          <div className={'font-black ' + (selfGrade ? 'text-orange-600' : answer === q.answer ? 'text-green-600' : 'text-red-500')}>
+            {selfGrade ? '📋 标准答案与解析，请对照自评：' + q.answer : answer === q.answer ? '✅ 精准契合！回答正确' : '❌ 回答错误，官方建议标准答案：' + q.answer}
           </div>
           <p className="font-bold text-gray-500 pt-1">{'💡 考点穿透核心解析：'}</p>
           <p className="font-medium text-gray-400">{q.explanation}</p>

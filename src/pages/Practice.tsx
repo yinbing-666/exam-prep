@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Routes, Route, useNavigate } from 'react-router-dom';
 import { getProfile } from '../stores/gamification';
-import { getAllStudySets, getResults, getWrongQuestions, saveStudySet, getSubjectFiles } from '../stores';
-import { countDueCards } from '../utils/fsrs-service';
+import { getAllStudySets, getResults, getWrongQuestions, saveStudySet, saveResult, getSubjectFiles } from '../stores';
+import { countDueCards, trackQuiz } from '../utils/fsrs-service';
 import { addSubject, getSubjects, type Subject } from '../utils/subjects';
 import type { UserProfile } from '../types/gamification';
-import type { QuizResult, StudySet } from '../types';
+import type { Question, QuizResult, StudySet } from '../types';
 import {
   AssetIcon,
   Card,
@@ -27,8 +27,10 @@ import { generateQuestions } from '../ai/generators';
 import FileSelector from '../components/FileSelector';
 import JobStatus from '../components/JobStatus';
 import { createJob } from '../api/jobs';
+import QuizCard, { QuizHeader } from '../components/QuizCard';
 import Mistakes from './Mistakes';
 import Review from './Review';
+import ReviewSession from './ReviewSession';
 import Modules from './Modules';
 import MockExams from './MockExams';
 
@@ -210,7 +212,7 @@ function PracticeMain() {
           <SectionTitle icon="calendar" title="复习工具" />
           {[
             { icon: 'mistake', title: '错题本', desc: '收录所有错题，针对性复习提升', badge: `${wrongCount} 题`, color: 'text-red-500 bg-red-50', path: '/practice/mistakes' },
-            { icon: 'calendar', title: 'FSRS复习', desc: '基于遗忘曲线，智能安排复习', badge: `待复习: ${dueCount} 题`, color: 'text-blue-600 bg-blue-50', path: '/practice/review' },
+            { icon: 'calendar', title: 'FSRS复习', desc: '基于遗忘曲线，智能安排复习', badge: `待复习: ${dueCount} 题`, color: 'text-blue-600 bg-blue-50', path: '/practice/fsrs' },
             { icon: 'book', title: '知识清单', desc: '按章节拆解核心考点', badge: `${sets.length} 套资料`, color: 'text-orange-600 bg-orange-50', path: '/practice/modules' },
           ].map(item => (
             <Card key={item.title} className="p-4 cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(item.path)}>
@@ -281,6 +283,25 @@ function NewSubject() {
   );
 }
 
+/** 客观题判定：AI 生成的 choice/judge+options 题目 answer 是选项字母（如 "A"），而用户作答是完整选项文本（如 "A.选项1"） */
+function isObjectiveQuestion(q: Question): boolean {
+  return q.type === 'choice' || (q.type === 'judge' && !!q.options?.length);
+}
+
+function checkAnswer(q: Question, userAnswer: string): boolean {
+  const u = userAnswer.trim();
+  const a = q.answer.trim();
+  if (!u) return false;
+  if (u === a) return true;
+  if (q.options?.length) {
+    const letterOf = (s: string) => s.match(/^([A-Ha-h])(?=[.、:：\s]|$)/)?.[1]?.toUpperCase() ?? '';
+    const ul = letterOf(u);
+    const al = letterOf(a);
+    if (ul && al) return ul === al;
+  }
+  return false;
+}
+
 function QuizSession() {
   const navigate = useNavigate();
   const [subjectConfig, setSubjectConfig] = useState<import('../ai/prompts').SubjectConfig | undefined>(undefined);
@@ -289,6 +310,15 @@ function QuizSession() {
   const [error, setError] = useState('');
   const [promptPreview, setPromptPreview] = useState('');
   const [jobId, setJobId] = useState<string | null>(null);
+
+  // ── 作答流程状态 ──────────────────────────────────────────────
+  const [quizQuestions, setQuizQuestions] = useState<Question[]>([]);
+  const [quizIndex, setQuizIndex] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState<Record<string, string>>({});
+  const [quizCorrect, setQuizCorrect] = useState<Record<string, boolean>>({});
+  const [revealedId, setRevealedId] = useState<string | null>(null);
+  const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
+  const [quizPhase, setQuizPhase] = useState<'config' | 'session' | 'summary'>('config');
   
   // 题型数量配置
   const [typeCounts, setTypeCounts] = useState<Record<string, number>>({
@@ -386,7 +416,11 @@ function QuizSession() {
         ...q,
         id: q.id || `q-${Date.now()}-${i}`,
       }));
-      
+      if (questions.length === 0) {
+        setError('未能从生成结果中解析出题目，请重试');
+        return;
+      }
+
       const studySet = {
         id: `quiz-${Date.now()}`,
         title: `${subjectName} 练习 - ${new Date().toLocaleDateString()}`,
@@ -397,12 +431,179 @@ function QuizSession() {
         subject: subjectName,
       };
       await saveStudySet(studySet);
-      navigate('/practice');
+      // 进入作答流程：作答→判分→saveResult（错题自动建 FSRS 卡）
+      setQuizQuestions(questions);
+      setQuizIndex(0);
+      setQuizAnswers({});
+      setQuizCorrect({});
+      setRevealedId(null);
+      setSavedIds(new Set());
+      setQuizPhase('session');
     } catch (e: any) {
       setError(e.message || '保存结果失败');
     } finally {
       setJobId(null);
     }
+  }
+
+  // ── 作答流程 ─────────────────────────────────────────────────
+  const currentQuestion = quizQuestions[quizIndex];
+  const isLastQuestion = quizIndex >= quizQuestions.length - 1;
+  const answeredCount = Object.keys(quizCorrect).length;
+  const correctCount = Object.values(quizCorrect).filter(Boolean).length;
+
+  /** 落库一次作答结果；错题由 saveResult 内部自动创建 FSRS 卡 */
+  async function persistResult(q: Question, userAnswer: string, correct: boolean) {
+    if (savedIds.has(q.id)) return;
+    setSavedIds(prev => new Set(prev).add(q.id));
+    setQuizCorrect(prev => ({ ...prev, [q.id]: correct }));
+    const result: QuizResult = {
+      questionId: q.id,
+      userAnswer,
+      correct,
+      answeredAt: Date.now(),
+    };
+    try {
+      await saveResult(result, q);
+    } catch (e) {
+      console.warn('[Practice] saveResult failed:', e);
+    }
+  }
+
+  function handleQuizAnswer(q: Question, ans: string) {
+    if (revealedId === q.id) return;
+    setQuizAnswers(prev => ({ ...prev, [q.id]: ans }));
+    // 客观题：选择后立即判分并展示解析
+    if (isObjectiveQuestion(q)) {
+      const correct = checkAnswer(q, ans);
+      setRevealedId(q.id);
+      persistResult(q, ans, correct);
+    }
+  }
+
+  /** 主观题：提交作答，对照标准答案自评 */
+  function handleSubmitSubjective(q: Question) {
+    if (revealedId === q.id) return;
+    if (!(quizAnswers[q.id] || '').trim()) return;
+    setRevealedId(q.id);
+  }
+
+  function handleSelfGrade(q: Question, correct: boolean) {
+    persistResult(q, quizAnswers[q.id] || '', correct);
+    goNextQuestion();
+  }
+
+  function goNextQuestion() {
+    if (isLastQuestion) {
+      setQuizPhase('summary');
+      trackQuiz(1);
+    } else {
+      setQuizIndex(i => i + 1);
+      setRevealedId(null);
+    }
+  }
+
+  // ── 作答完成总结 ──────────────────────────────────────────────
+  if (quizPhase === 'summary') {
+    const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0;
+    return (
+      <PageShell>
+        <HeroHeader
+          compact
+          title="练习完成"
+          subtitle={`${subjectName} · 共 ${quizQuestions.length} 题`}
+          mascot="/icons/mascot-rabbit.png"
+        />
+        <div className="relative z-20 mt-7 px-6 space-y-6">
+          <Card className="p-6 text-center">
+            <div className="num-3d text-6xl font-[900] tracking-tighter text-gray-800">{accuracy}%</div>
+            <div className="mt-2 text-sm font-black text-gray-500">
+              答对 {correctCount} 题 / 共答 {answeredCount} 题
+            </div>
+            <div className="mt-5 space-y-2">
+              <ProgressBar value={accuracy} height={10} />
+              <p className="text-xs font-bold text-gray-400">
+                答错的题已自动收错题本并加入 FSRS 复习计划
+              </p>
+            </div>
+          </Card>
+          <OrangeButton className="w-full py-4 text-base" onClick={() => navigate('/practice')}>返回练习列表</OrangeButton>
+          <button
+            className="w-full rounded-2xl border border-orange-100 bg-white py-4 text-base font-black text-orange-600"
+            onClick={() => navigate('/practice/fsrs')}
+          >
+            去复习 FSRS 卡片 ＞
+          </button>
+        </div>
+      </PageShell>
+    );
+  }
+
+  // ── 逐题作答视图 ──────────────────────────────────────────────
+  if (quizPhase === 'session' && currentQuestion) {
+    const revealed = revealedId === currentQuestion.id;
+    const objective = isObjectiveQuestion(currentQuestion);
+    const userAnswer = quizAnswers[currentQuestion.id] || '';
+    return (
+      <PageShell>
+        <QuizHeader
+          index={quizIndex}
+          total={quizQuestions.length}
+          title={`${subjectName} 练习`}
+          onBack={() => setQuizPhase('config')}
+        />
+        <div className="px-4 pb-10 pt-3">
+          <ProgressBar
+            value={Math.round((quizIndex / quizQuestions.length) * 100)}
+            height={8}
+          />
+          <div className="mt-4">
+            <QuizCard
+              key={currentQuestion.id}
+              question={currentQuestion}
+              answer={userAnswer}
+              showResult={revealed}
+              onAnswer={(ans) => handleQuizAnswer(currentQuestion, ans)}
+              selfGrade={!objective}
+            />
+          </div>
+
+          {/* 客观题：判分后进入下一题 */}
+          {revealed && objective && (
+            <OrangeButton className="mt-4 w-full py-3.5 text-sm" onClick={goNextQuestion}>
+              {isLastQuestion ? '查看总结' : '下一题 ＞'}
+            </OrangeButton>
+          )}
+
+          {/* 主观题：提交后对照标准答案自评 */}
+          {!objective && !revealed && (
+            <OrangeButton
+              className="mt-4 w-full py-3.5 text-sm disabled:opacity-50"
+              onClick={() => handleSubmitSubjective(currentQuestion)}
+              disabled={!userAnswer.trim()}
+            >
+              提交本题，对照答案自评
+            </OrangeButton>
+          )}
+          {!objective && revealed && (
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <button
+                className="rounded-2xl border-2 border-green-200 bg-green-50 py-3.5 text-sm font-black text-green-600 active:translate-y-[2px]"
+                onClick={() => handleSelfGrade(currentQuestion, true)}
+              >
+                ✓ 我答对了
+              </button>
+              <button
+                className="rounded-2xl border-2 border-red-200 bg-red-50 py-3.5 text-sm font-black text-red-500 active:translate-y-[2px]"
+                onClick={() => handleSelfGrade(currentQuestion, false)}
+              >
+                ✗ 没答对
+              </button>
+            </div>
+          )}
+        </div>
+      </PageShell>
+    );
   }
 
   return (
@@ -536,6 +737,7 @@ export default function Practice() {
       <Route path="quiz" element={<QuizSession />} />
       <Route path="mistakes" element={<MistakesPage />} />
       <Route path="review" element={<ReviewPage />} />
+      <Route path="fsrs" element={<FsrsReviewPage />} />
       <Route path="modules" element={<ModulesPage />} />
       <Route path="mock" element={<MockExamsPage />} />
       <Route path="*" element={<PracticeMain />} />
@@ -581,6 +783,11 @@ function ReviewPage() {
       }}
     />
   );
+}
+
+function FsrsReviewPage() {
+  const navigate = useNavigate();
+  return <ReviewSession onBack={() => navigate('/practice')} />;
 }
 
 function ModulesPage() {

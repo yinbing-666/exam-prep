@@ -60,7 +60,7 @@ export interface ExamProject {
 
 export interface Question {
   id: string;
-  type: 'choice' | 'judge' | 'short' | 'essay' | 'programming';
+  type: 'choice' | 'judge' | 'short' | 'essay' | 'programming' | 'fill' | 'calc' | 'draw';
   question: string;
   options?: string[];
   answer: string;

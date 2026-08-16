@@ -1,4 +1,4 @@
-const CACHE_NAME = 'exam-prep-v4';
+const CACHE_NAME = 'exam-prep-v5';
 const ASSETS = ['/', '/index.html'];
 
 self.addEventListener('install', (event) => {
@@ -19,9 +19,8 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
-  if (event.request.url.includes('dashscope.aliyuncs.com')) return;
-  if (event.request.url.includes('106.14.167.104')) return;
-  if (event.request.url.includes('api.deepseek.com')) return;
+  // API 响应（含登录 token 等敏感数据）一律直连网络，不进缓存
+  if (new URL(event.request.url).pathname.startsWith('/api')) return;
 
   // Network-first strategy: always try network first, fall back to cache
   event.respondWith(
