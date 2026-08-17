@@ -51,7 +51,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
     if (!username.trim()) { setError('请输入用户名'); return; }
     if (!password) { setError('请输入密码'); return; }
     if (tab === 'register') {
-      if (password.length < 6) { setError('密码至少6位'); return; }
+      if (password.length < 8) { setError('密码至少8位'); return; }
       if (password !== confirm) { setError('两次密码不一致'); return; }
     }
 

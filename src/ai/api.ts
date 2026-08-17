@@ -1,6 +1,6 @@
 // 后端API工具 — 用于将AI出题结果自动同步到后端
 
-import { getToken } from '../stores/auth';
+import { getToken, handleUnauthorized } from '../stores/auth';
 import type { Question } from '../types';
 
 const API_BASE = '/api';
@@ -38,6 +38,8 @@ export async function batchSaveQuestions(
     });
 
     if (!resp.ok) {
+      // token 过期：全局登出并跳转登录页
+      if (resp.status === 401) handleUnauthorized();
       const err = await resp.json().catch(() => ({}));
       console.warn('[ai/api] 批量保存题目失败:', resp.status, err);
       return { saved: 0, skipped: questions.length };

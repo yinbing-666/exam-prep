@@ -215,9 +215,9 @@ function getToday(): string {
 }
 
 /**
- * P2-6 fix: archiveIfNeeded() is now called INSIDE getDailyChallenges()
- * BEFORE loadDailyRecord(), so it can properly detect a day boundary.
- * Archives the previous day's record to history and resets for today.
+ * Archives a stale (previous-day) daily record into history.
+ * Day-boundary reset is handled by loadDailyRecord(): it archives the
+ * old record here, then returns a fresh zero-value record for today.
  */
 function archiveIfNeeded(storedRec: DailyRecord | null): void {
   const today = getToday()
@@ -239,11 +239,20 @@ function archiveIfNeeded(storedRec: DailyRecord | null): void {
 }
 
 function loadDailyRecord(): DailyRecord {
+  const today = getToday()
   try {
     const raw = localStorage.getItem(DAILY_KEY)
-    if (raw) return JSON.parse(raw) as DailyRecord
+    if (raw) {
+      const rec = JSON.parse(raw) as DailyRecord
+      // 已是最新一天的记录，直接返回
+      if (rec.date === today) return rec
+      // 跨天：先把旧记录归档进 history，再重置为新一天零值
+      archiveIfNeeded(rec)
+    }
   } catch { /* ignore */ }
-  return { date: getToday(), reviews: 0, newCards: 0, quizzes: 0, minutes: 0 }
+  const fresh: DailyRecord = { date: today, reviews: 0, newCards: 0, quizzes: 0, minutes: 0 }
+  saveDailyRecord(fresh)
+  return fresh
 }
 
 function saveDailyRecord(rec: DailyRecord): void {
@@ -340,12 +349,7 @@ export function getDailyChallenges(): {
   quizzesTarget: number
   streak: number
 } {
-  // P2-6: archive before loading — this ensures we catch day boundaries correctly
-  const stored = (() => {
-    try { return localStorage.getItem(DAILY_KEY) ? JSON.parse(localStorage.getItem(DAILY_KEY)!) as DailyRecord : null }
-    catch { return null }
-  })()
-  archiveIfNeeded(stored)
+  // loadDailyRecord() 内部统一处理跨天归档+重置，读到的必是今天的记录
   const rec = loadDailyRecord()
   return {
     reviewsDone: rec.reviews,

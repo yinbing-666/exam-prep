@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { handleUnauthorized } from '../stores/auth';
 
 interface Job {
   id: string;
@@ -34,6 +35,7 @@ export default function JobStatus({ jobId, onComplete, onError }: Props) {
         });
         
         if (!resp.ok) {
+          if (resp.status === 401) handleUnauthorized(); // token 过期：全局登出并跳转登录页
           clearInterval(pollInterval);
           setPolling(false);
           return;

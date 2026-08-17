@@ -1,5 +1,5 @@
 import { DailyPlan } from '../types';
-import { getAll, put, putMany, clearStore } from './db';
+import { getAll, put, putMany, deleteById } from './db';
 
 export async function getAllDailyPlans(): Promise<DailyPlan[]> {
   return getAll<DailyPlan>('dailyPlans');
@@ -29,5 +29,9 @@ export async function completePlanWithFeedback(id: string, feedback: { mastery: 
 }
 
 export async function deleteAllDailyPlans(): Promise<void> {
-  return clearStore('dailyPlans');
+  // 与 deleteAllModules 同理：逐条 deleteById 写墓碑，避免 clearStore 绕过墓碑导致 pull 复活
+  const plans = await getAllDailyPlans();
+  for (const p of plans) {
+    await deleteById('dailyPlans', String(p.id));
+  }
 }

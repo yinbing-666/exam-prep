@@ -2,6 +2,8 @@
  * 异步任务 API 调用
  */
 
+import { handleUnauthorized } from '../stores/auth';
+
 const API_BASE = '/api/jobs';
 
 interface CreateJobParams {
@@ -37,7 +39,10 @@ async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Re
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  return fetch(url, { ...options, headers });
+  const resp = await fetch(url, { ...options, headers });
+  // token 过期：全局登出并跳转登录页
+  if (resp.status === 401) handleUnauthorized();
+  return resp;
 }
 
 /**

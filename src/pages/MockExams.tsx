@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MockExam, MockExamConfig } from '../types';
 import { getAllMockExams, saveMockExam, deleteMockExam, getAllStudySets, getSubjectFiles } from '../stores';
 import { generateMockExam, getProviders, type ModelProvider } from '../ai';
+import { handleUnauthorized } from '../stores/auth';
 import FileSelector from '../components/FileSelector';
 
 interface Props { onBack: () => void; subject?: string }
@@ -108,6 +109,7 @@ export default function MockExams({ onBack, subject }: Props) {
               const res = await fetch(`/api/upload/files/${f.id}/text`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('exam_token')}` },
               });
+              if (res.status === 401) handleUnauthorized(); // token 过期：全局登出并跳转登录页
               if (res.ok) {
                 const data = await res.json();
                 return `【${f.filename}】\n${data.text}`;

@@ -13,7 +13,47 @@ import Stats from './pages/Stats';
 import Profile from './pages/Profile';
 import { GameIcon } from './components/SharedUI';
 import { isLoggedIn, logout } from './stores/auth';
-import { syncAll } from './stores/sync';
+import { syncAll, getSyncState, subscribeSyncState, type SyncState } from './stores/sync';
+
+// 同步状态提示条：同步中 / 上次同步失败时显示（成功静默）
+function SyncStatusBar() {
+  const [state, setState] = useState<SyncState>(getSyncState());
+
+  useEffect(() => subscribeSyncState(setState), []);
+
+  const lastSuccessText = state.lastSuccessAt
+    ? new Date(state.lastSuccessAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : null;
+
+  let text = '';
+  let bg = '#f97316';
+  if (state.syncing) {
+    text = '正在同步…';
+  } else if (state.lastError) {
+    text = `同步失败：${state.lastError}${lastSuccessText ? `（上次成功 ${lastSuccessText}）` : ''}，将自动重试`;
+    bg = '#dc2626';
+  }
+  if (!text) return null;
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      zIndex: 300,
+      background: bg,
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: 700,
+      textAlign: 'center',
+      padding: '4px 12px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    }}>
+      {text}
+    </div>
+  );
+}
 
 // 3D 微动效 Tab 栏
 function TabBar() {
@@ -106,6 +146,7 @@ function App() {
   return (
     <Router>
       <div style={{ minHeight: '100vh', background: '#faf8f5' }}>
+        {isLoggedInState && <SyncStatusBar />}
         <Routes>
           <Route path="/login" element={<Login onDone={() => setIsLoggedInState(true)} />} />
           <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />

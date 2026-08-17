@@ -44,6 +44,23 @@ export function logout() {
   localStorage.removeItem(USER_KEY);
 }
 
+let redirectingToLogin = false;
+
+/**
+ * 全局 401 处理：token 过期/失效时清空登录态并跳转登录页。
+ * 并发 401 只触发一次跳转（后续请求只清态不重复跳转）。
+ */
+export function handleUnauthorized() {
+  logout();
+  if (redirectingToLogin) return;
+  redirectingToLogin = true;
+  console.warn('[auth] token 已过期或无效，跳转登录页');
+  // 记录来源路径，登录后可跳回（window.location 整页跳转，简单可靠）
+  const current = window.location.pathname + window.location.search;
+  const target = current && current !== '/login' ? `/login?redirect=${encodeURIComponent(current)}` : '/login';
+  window.location.href = target;
+}
+
 async function safeJson(resp: Response): Promise<any> {
   const text = await resp.text();
   if (!text) return {};

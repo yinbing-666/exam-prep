@@ -2,7 +2,7 @@
 // 职责：封装 /api/subjects 和 /api/upload 的后端调用（唯一数据源），
 // 并把后端科目与本地偏好（考试日期/每日学习时长，见 utils/subjects）合并成展示层数据
 
-import { getToken } from './auth';
+import { getToken, handleUnauthorized } from './auth';
 import type { SubjectConfig } from '../ai/prompts';
 import { getSubjectPrefs } from '../utils/subjects';
 
@@ -15,6 +15,11 @@ function getHeaders(): Record<string, string> {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
+}
+
+/** token 过期（401）时全局登出并跳转登录页 */
+function maybeHandleUnauthorized(res: Response) {
+  if (res.status === 401) handleUnauthorized();
 }
 
 // ---- Types ----
@@ -97,6 +102,7 @@ export async function fetchSubjectDetail(subjectId: string): Promise<BackendSubj
     headers: getHeaders(),
   });
   if (!res.ok) {
+    maybeHandleUnauthorized(res);
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.message || '获取科目详情失败');
   }
@@ -126,6 +132,7 @@ export async function getAllSubjects(): Promise<Subject[]> {
     headers: getHeaders(),
   });
   if (!res.ok) {
+    maybeHandleUnauthorized(res);
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.message || '获取科目列表失败');
   }
@@ -155,6 +162,7 @@ export async function createSubject(payload: CreateSubjectPayload): Promise<Subj
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    maybeHandleUnauthorized(res);
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.message || '创建科目失败');
   }
@@ -183,6 +191,7 @@ export async function updateSubject(id: string, payload: UpdateSubjectPayload): 
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    maybeHandleUnauthorized(res);
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.message || '更新科目失败');
   }
@@ -198,6 +207,7 @@ export async function deleteSubject(id: string): Promise<void> {
     headers: getHeaders(),
   });
   if (!res.ok) {
+    maybeHandleUnauthorized(res);
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.message || '删除科目失败');
   }
@@ -217,6 +227,7 @@ export async function uploadFile(file: File, subjectId: string): Promise<UploadR
     body: formData,
   });
   if (!res.ok) {
+    maybeHandleUnauthorized(res);
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.message || '上传失败');
   }
@@ -231,6 +242,7 @@ export async function getSubjectFiles(subjectId: string): Promise<any[]> {
     headers: getHeaders(),
   });
   if (!res.ok) {
+    maybeHandleUnauthorized(res);
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.message || '获取文件列表失败');
   }

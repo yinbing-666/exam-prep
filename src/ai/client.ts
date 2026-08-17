@@ -2,7 +2,7 @@
 // 职责：管理模型提供商、API Key、发起HTTP请求
 
 import { KnowledgeModule, Question } from '../types';
-import { getToken } from '../stores/auth';
+import { getToken, handleUnauthorized } from '../stores/auth';
 
 export interface ModelProvider {
   id: string;
@@ -109,6 +109,8 @@ export async function callAI(
       }),
     });
     if (!resp.ok) {
+      // token 过期：全局登出并跳转登录页
+      if (resp.status === 401) handleUnauthorized();
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.detail || `API error: ${resp.status}`);
     }

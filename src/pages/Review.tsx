@@ -164,7 +164,7 @@ const Review: React.FC<ReviewProps> = ({ reviewQuestions: initQuestions, onSessi
           {expandedId === current.questionId && (
             <div style={{ display: 'flex', gap: 12 }}>
               <button
-                onClick={() => { handleMarkMastered(current.questionId); handleReviewAnswer(false); setReviewIndex(i => i + 1); setExpandedId(null); }}
+                onClick={() => { handleReviewAnswer(false); setReviewIndex(i => i + 1); setExpandedId(null); }}
                 style={{ flex: 1, padding: 12, background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: 8, fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}
               >
                 还不太会 ✗

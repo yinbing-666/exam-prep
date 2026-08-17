@@ -187,9 +187,5 @@ export async function deleteById(storeName: StoreName, id: string, opts?: { from
     }
 }
 
-export async function clearStore(storeName: StoreName): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(storeName, 'readwrite');
-  tx.objectStore(storeName).clear();
-  return new Promise((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); });
-}
+// 注意：不再提供 clearStore —— 直接清空 store 会绕过墓碑机制（本地删除无法推送远端，
+// 下次 pull 时旧记录全部复活）。需要清空某个 store 时必须逐条 deleteById（自动写墓碑）。

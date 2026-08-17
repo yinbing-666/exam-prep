@@ -1,5 +1,5 @@
 import { KnowledgeModule } from '../types';
-import { getAll, getById, put, putMany, clearStore } from './db';
+import { getAll, getById, put, putMany, deleteById } from './db';
 import { schedulePush } from './sync';
 
 export async function getAllModules(): Promise<KnowledgeModule[]> {
@@ -22,5 +22,10 @@ export async function updateModuleStatus(id: string, status: 'todo' | 'doing' | 
 }
 
 export async function deleteAllModules(): Promise<void> {
-  return clearStore('modules');
+  // 逐条 deleteById 而非 clearStore：删除必须写墓碑，否则服务器旧记录会在下次 pull 时全部复活
+  const modules = await getAllModules();
+  for (const m of modules) {
+    await deleteById('modules', String(m.id));
+  }
+  schedulePush('modules');
 }

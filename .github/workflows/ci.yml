@@ -16,6 +16,8 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      # 类型检查显式进 CI（build 内也含 tsc --noEmit，双保险）
+      - run: npx tsc --noEmit
       - run: npm run build
 
   backend:
