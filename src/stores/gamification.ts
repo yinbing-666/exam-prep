@@ -1,6 +1,7 @@
 // 游戏化数据管理 - XP/等级/打卡/成就
 import { openDB, getAll, put, getById } from './db';
 import { schedulePush } from './sync';
+import { toLocalDateStr } from '../utils/date';
 import { UserProfile, Achievement, DEFAULT_PROFILE, ACHIEVEMENTS, XP_RULES, getXpForLevel, LeaderboardEntry, VIRTUAL_LEADERBOARD } from '../types/gamification';
 
 const STORE_NAME = 'gamification';
@@ -69,13 +70,13 @@ export async function addXP(amount: number, reason: string): Promise<{ leveledUp
 // 更新打卡
 export async function updateStreak(): Promise<{ streak: number; isNew: boolean }> {
   const profile = await getProfile();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateStr(new Date());
 
   if (profile.lastStudyDate === today) {
     return { streak: profile.streak, isNew: false };
   }
 
-  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  const yesterday = toLocalDateStr(new Date(Date.now() - 86400000));
   if (profile.lastStudyDate === yesterday) {
     profile.streak += 1;
   } else if (profile.lastStudyDate !== today) {

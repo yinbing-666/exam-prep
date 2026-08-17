@@ -1,18 +1,22 @@
 import { MockExam, MockAttempt } from '../types';
 import { getAll, put, deleteById } from './db';
+import { schedulePush } from './sync';
 
 export async function getAllMockExams(): Promise<MockExam[]> {
   return getAll<MockExam>('mockExams');
 }
 
 export async function saveMockExam(exam: MockExam): Promise<void> {
-  return put('mockExams', exam);
+  await put('mockExams', exam);
+  schedulePush('mockExams');
 }
 
 export async function deleteMockExam(id: string): Promise<void> {
-  return deleteById('mockExams', id);
+  await deleteById('mockExams', id);
+  schedulePush('mockExams');
 }
 
 export async function saveMockAttempt(attempt: MockAttempt): Promise<void> {
-  return put('mockAttempts', attempt);
+  await put('mockAttempts', attempt);
+  schedulePush('mockAttempts');
 }

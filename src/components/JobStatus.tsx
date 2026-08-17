@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { handleUnauthorized } from '../stores/auth';
+import { useState, useEffect, useRef } from 'react';
+import { getToken, handleUnauthorized } from '../stores/auth';
 
 interface Job {
   id: string;
@@ -24,12 +24,25 @@ export default function JobStatus({ jobId, onComplete, onError }: Props) {
   const [job, setJob] = useState<Job | null>(null);
   const [polling, setPolling] = useState(true);
 
+  // 父组件常传内联回调（每次渲染都是新引用）：用 ref 保存最新回调，
+  // 避免回调引用变化导致 effect 反复重建轮询 interval
+  const onCompleteRef = useRef(onComplete);
+  const onErrorRef = useRef(onError);
+  onCompleteRef.current = onComplete;
+  onErrorRef.current = onError;
+
   useEffect(() => {
     if (!jobId || !polling) return;
 
     const pollInterval = setInterval(async () => {
       try {
-        const token = localStorage.getItem('exam_token');
+        // 与全局登录态一致：走 stores/auth 的内存 token，不从 localStorage 直接读
+        const token = getToken();
+        if (!token) {
+          clearInterval(pollInterval);
+          setPolling(false);
+          return;
+        }
         const resp = await fetch(`/api/jobs/${jobId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -49,14 +62,14 @@ export default function JobStatus({ jobId, onComplete, onError }: Props) {
           setPolling(false);
           try {
             const result = JSON.parse(data.result);
-            onComplete(result);
+            onCompleteRef.current(result);
           } catch {
-            onComplete(data.result);
+            onCompleteRef.current(data.result);
           }
         } else if (data.status === 'failed') {
           clearInterval(pollInterval);
           setPolling(false);
-          onError?.(data.error || '处理失败');
+          onErrorRef.current?.(data.error || '处理失败');
         }
       } catch (err) {
         console.error('轮询失败:', err);
@@ -64,7 +77,7 @@ export default function JobStatus({ jobId, onComplete, onError }: Props) {
     }, 2000); // 每2秒轮询一次
 
     return () => clearInterval(pollInterval);
-  }, [jobId, polling, onComplete, onError]);
+  }, [jobId, polling]);
 
   if (!job) {
     return (

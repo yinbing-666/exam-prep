@@ -17,7 +17,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
+# auto_error=False：缺 Authorization 头时由 get_current_user_id 统一抛 401，
+# 而不是 FastAPI 默认的 403（与客户端"未登录"语义匹配）
+security = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
@@ -43,8 +45,10 @@ def verify_token(token: str) -> Optional[str]:
 
 
 async def get_current_user_id(
-    cred: HTTPAuthorizationCredentials = Depends(security),
+    cred: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> str:
+    if cred is None:
+        raise HTTPException(status_code=401, detail="未提供认证凭证")
     user_id = verify_token(cred.credentials)
     if not user_id:
         raise HTTPException(status_code=401, detail="Token无效或已过期")

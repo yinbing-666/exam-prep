@@ -2,7 +2,7 @@
  * 异步任务 API 调用
  */
 
-import { handleUnauthorized } from '../stores/auth';
+import { getToken, handleUnauthorized } from '../stores/auth';
 
 const API_BASE = '/api/jobs';
 
@@ -24,10 +24,6 @@ interface Job {
   created_at: string;
   started_at?: string;
   completed_at?: string;
-}
-
-function getToken(): string | null {
-  return localStorage.getItem('exam_token');
 }
 
 async function fetchWithAuth(url: string, options: RequestInit = {}): Promise<Response> {
@@ -119,7 +115,12 @@ export async function waitForJob(
   onProgress?: (progress: number, text: string) => void,
   pollInterval: number = 2000
 ): Promise<any> {
+  const timeoutMs = 10 * 60 * 1000; // 10 分钟上限，防止任务卡死导致无限轮询
+  const deadline = Date.now() + timeoutMs;
   while (true) {
+    if (Date.now() > deadline) {
+      throw new Error('等待任务超时（10 分钟），请稍后到任务列表查看结果');
+    }
     const job = await getJobStatus(jobId);
     
     if (onProgress) {

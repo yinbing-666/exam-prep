@@ -1,11 +1,12 @@
 """AI出题记录 API — 存储已出题目，防重复"""
+import json
 import uuid
 import hashlib
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sqlfunc
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from database import get_db
 from models import AIGeneratedQuestion, Subject
@@ -15,13 +16,13 @@ router = APIRouter(prefix="/api/questions", tags=["questions"])
 
 
 class QuestionRecord(BaseModel):
-    subject_id: str
-    question_text: str
-    question_type: str
-    correct_answer: Optional[str] = ""
-    explanation: Optional[str] = ""
-    source_file_id: Optional[str] = None
-    source_chunk: Optional[str] = ""
+    subject_id: str = Field(..., max_length=100)
+    question_text: str = Field(..., max_length=20000)
+    question_type: str = Field(..., max_length=50)
+    correct_answer: Optional[str] = Field("", max_length=10000)
+    explanation: Optional[str] = Field("", max_length=20000)
+    source_file_id: Optional[str] = Field(None, max_length=100)
+    source_chunk: Optional[str] = Field("", max_length=50000)
 
 
 class ReviewRecord(BaseModel):
@@ -68,9 +69,21 @@ def record_question(body: QuestionRecord, db: Session = Depends(get_db), user_id
     return {"id": question.id, "duplicate": False}
 
 
+# 批量出题接口的上限：防一次性超大请求拖垮 DB / 刷存储（与 ai_proxy.MAX_BODY_BYTES 同量级）
+MAX_BATCH_ITEMS = 200
+MAX_BODY_BYTES = 256 * 1024
+
+
 @router.post("/batch")
 def record_questions_batch(body: List[QuestionRecord], db: Session = Depends(get_db), user_id: str = Depends(get_current_user_id)):
     """批量记录题目"""
+    if not body:
+        raise HTTPException(400, "批量记录不能为空")
+    if len(body) > MAX_BATCH_ITEMS:
+        raise HTTPException(400, f"批量记录数量不能超过 {MAX_BATCH_ITEMS} 条")
+    body_bytes = len(json.dumps([item.model_dump() for item in body], ensure_ascii=False).encode("utf-8"))
+    if body_bytes > MAX_BODY_BYTES:
+        raise HTTPException(413, "请求体过大，请减少批量条数或单条长度")
     results = []
     new_count = 0
     dup_count = 0

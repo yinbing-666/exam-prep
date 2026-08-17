@@ -31,6 +31,22 @@ export default function Me() {
   const xpPercent = profile.xpToNext > 0 ? Math.round((profile.xp / profile.xpToNext) * 100) : 0;
   const unlocked = achievements.filter(a => a.unlocked).length;
 
+  // 备份脱敏：exam-prep-model-config 含自定义 provider 的 API Key，导出时抹掉密钥，
+  // 避免备份文件分享出去即泄露密钥（保留其余配置，导入后仅需重填 key）
+  function sanitizeForExport(key: string, value: unknown): unknown {
+    if (key !== 'exam-prep-model-config') return value;
+    const maskProvider = (p: unknown): unknown => {
+      if (p && typeof p === 'object') {
+        const { apiKey, ...rest } = p as Record<string, unknown>;
+        return { ...rest, apiKey: apiKey ? '***' : apiKey };
+      }
+      return p;
+    };
+    if (Array.isArray(value)) return value.map(maskProvider);
+    if (value && typeof value === 'object') return maskProvider(value);
+    return value;
+  }
+
   async function exportData() {
     // 全量备份：profile/成就（localStorage）+ IndexedDB 全部 store + 本地配置（科目偏好/模型配置等）
     const storeNames = ['studySets', 'results', 'mastered', 'modules', 'mockExams', 'mockAttempts', 'materials', 'dailyPlans', 'fsrsCards', 'gamification'];
@@ -42,7 +58,9 @@ export default function Me() {
     for (const key of ['exam-prep-subject-prefs', 'exam-prep-active-subject', 'exam-prep-model-config', 'exam-prep-subjects']) {
       const raw = localStorage.getItem(key);
       if (raw !== null) {
-        try { localStorageSnapshot[key] = JSON.parse(raw); } catch { localStorageSnapshot[key] = raw; }
+        let value: unknown = raw;
+        try { value = JSON.parse(raw); } catch { /* 保留原始字符串 */ }
+        localStorageSnapshot[key] = sanitizeForExport(key, value);
       }
     }
     const blob = new Blob([JSON.stringify({

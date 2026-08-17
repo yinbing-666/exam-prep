@@ -173,7 +173,14 @@ export async function syncPull(storeNames?: StoreName[]): Promise<void> {
   const names = storeNames || SYNC_STORES;
   setSyncState({ syncing: true });
   try {
-    const data = await withRetry('pull', () => apiFetch('/api/sync/pull', { store_names: names }));
+    const body: { store_names: StoreName[]; since?: string } = { store_names: names };
+    // 增量拉取：以上次成功同步时间为 since，只取此后的变更；首次同步（lastSuccessAt 为 null）不传 since 保持全量。
+    // 减 60s 缓冲抵消客户端/服务器时钟偏差——客户端时钟快于服务器时 since 会落到未来导致漏拉。
+    const lastSuccessAt = currentSyncState.lastSuccessAt;
+    if (lastSuccessAt !== null) {
+      body.since = new Date(lastSuccessAt - 60_000).toISOString();
+    }
+    const data = await withRetry('pull', () => apiFetch('/api/sync/pull', body));
     if (!data) {
       setSyncState({ syncing: false, lastSuccessAt: Date.now(), lastError: null });
       return;

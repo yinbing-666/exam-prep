@@ -18,6 +18,7 @@ import {
   daysUntil,
 } from '../components/TargetUI';
 import { GameIcon } from '../components/SharedUI';
+import { toLocalDateStr } from '../utils/date';
 
 function subjectIcon(name: string) {
   if (name.includes('数')) return 'math';
@@ -88,7 +89,7 @@ export default function Home() {
   }, []);
 
   const todayPlans = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toLocalDateStr(new Date());
     return plans.filter(plan => plan.date === today);
   }, [plans]);
 

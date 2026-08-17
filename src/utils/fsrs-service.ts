@@ -1,6 +1,7 @@
 import { fsrs, createEmptyCard, State, Rating, generatorParameters } from 'ts-fsrs'
 import { openDB, getAll, put, putMany, getById, deleteById } from '../stores/db'
 import { schedulePush } from '../stores/sync'
+import { toLocalDateStr } from './date'
 
 // ─── FSRS Card type stored in IndexedDB ─────────────────────────
 export interface FsrsCard {
@@ -200,14 +201,6 @@ interface DailyRecord {
   newCards: number
   quizzes: number
   minutes: number
-}
-
-// 本地时区的 YYYY-MM-DD（toISOString 会按 UTC 切日界，导致东八区晚 8 小时才换天）
-function toLocalDateStr(d: Date): string {
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${y}-${m}-${day}`
 }
 
 function getToday(): string {

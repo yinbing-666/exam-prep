@@ -5,7 +5,7 @@ import re
 import os
 import base64
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
@@ -19,6 +19,16 @@ from routes.ai_proxy import AI_API_KEY, AI_API_BASE, AI_MODEL
 
 logger = logging.getLogger("jobs")
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+
+# 每用户同时进行中的任务数上限：每个任务触发多轮 16384 max_tokens 的 AI 调用，
+# 无上限会被并发刷爆 AI 成本
+MAX_ACTIVE_JOBS_PER_USER = 5
+MAX_FILES_PER_JOB = 50
+
+
+def _utcnow():
+    """naive UTC，与 sync.py/questions.py 的存储约定一致（SQLite DateTime 列存 naive UTC）"""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class CreateJobRequest(BaseModel):
@@ -36,6 +46,18 @@ async def create_job(
     user_id: str = Depends(get_current_user_id),
 ):
     """创建异步处理任务"""
+    if not req.file_ids:
+        raise HTTPException(400, "请选择要处理的文件")
+    if len(req.file_ids) > MAX_FILES_PER_JOB:
+        raise HTTPException(400, f"单次任务最多处理 {MAX_FILES_PER_JOB} 个文件")
+
+    active_count = db.query(ProcessingJob).filter(
+        ProcessingJob.user_id == user_id,
+        ProcessingJob.status.in_(["pending", "processing"]),
+    ).count()
+    if active_count >= MAX_ACTIVE_JOBS_PER_USER:
+        raise HTTPException(429, f"同时进行中的任务不能超过 {MAX_ACTIVE_JOBS_PER_USER} 个，请等待现有任务完成")
+
     subject = db.query(Subject).filter(
         Subject.id == req.subject_id,
         Subject.user_id == user_id
@@ -166,7 +188,7 @@ def fail_stale_jobs():
         ).all()
         if not stale:
             return
-        now = datetime.now()
+        now = _utcnow()
         for job in stale:
             job.status = "failed"
             job.error = "服务重启，任务中断，请重新发起"
@@ -238,7 +260,7 @@ async def process_job(job_id: str, job_type: str, subject_id: str, file_ids: lis
             return
 
         job.status = "processing"
-        job.started_at = datetime.now()
+        job.started_at = _utcnow()
         job.progress_text = "正在获取文件内容..."
         job.progress = 5
         db.commit()
@@ -277,7 +299,7 @@ async def process_job(job_id: str, job_type: str, subject_id: str, file_ids: lis
                 logger.error(f"批次 {batch_idx+1} 处理失败: {e}", exc_info=True)
                 job.error = f"处理第{batch_start+1}-{batch_end}个文件时出错: {str(e)}"
                 job.status = "failed"
-                job.completed_at = datetime.now()
+                job.completed_at = _utcnow()
                 db.commit()
                 return
 
@@ -311,7 +333,7 @@ async def process_job(job_id: str, job_type: str, subject_id: str, file_ids: lis
         job.status = "completed"
         job.progress = 100
         job.progress_text = "处理完成！"
-        job.completed_at = datetime.now()
+        job.completed_at = _utcnow()
         db.commit()
 
     except Exception as e:
@@ -319,7 +341,7 @@ async def process_job(job_id: str, job_type: str, subject_id: str, file_ids: lis
         if job:
             job.status = "failed"
             job.error = str(e)
-            job.completed_at = datetime.now()
+            job.completed_at = _utcnow()
             db.commit()
     finally:
         db.close()

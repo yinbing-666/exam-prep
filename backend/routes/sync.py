@@ -1,8 +1,8 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from database import get_db
 from models import UserSync
 from auth import get_current_user_id
@@ -15,9 +15,17 @@ VALID_STORES = [
     "dailyPlans", "fsrsCards", "gamification",
 ]
 
+# 单次 push 的条数上限与单条记录体积上限：防一次性超大请求拖垮 DB
+MAX_PUSH_ITEMS = 1000
+MAX_ITEM_BYTES = 64 * 1024
+
+# 墓碑保留期：超过该天数且 data.deleted=true 的记录在 pull 时顺手清理，
+# 避免 user_sync 表行数只增不减（超期墓碑已足够传播到所有活跃客户端）
+TOMBSTONE_GC_DAYS = 30
+
 
 class SyncItem(BaseModel):
-    item_id: str
+    item_id: str = Field(..., max_length=255)
     # 记录级更新时间戳（epoch ms）由 data.updatedAt 携带，用于按记录合并
     # 墓碑：本地删除的记录以 data={"deleted": true, "updatedAt": <epoch ms>} 推送，
     # 后端照常 upsert（保留 deleted 字段），pull 时照常返回，由客户端按时间戳裁决是否删除本地
@@ -25,13 +33,13 @@ class SyncItem(BaseModel):
 
 
 class PushReq(BaseModel):
-    store_name: str
+    store_name: str = Field(..., max_length=50)
     items: list[SyncItem]
 
 
 class PullReq(BaseModel):
-    store_names: list[str]
-    since: str | None = None  # ISO datetime, 拉取此时间之后的变更
+    store_names: list[str] = Field(..., max_length=20)
+    since: str | None = Field(None, max_length=64)  # ISO datetime, 拉取此时间之后的变更
 
 
 def _client_ts(data: dict) -> float | None:
@@ -46,6 +54,16 @@ def _client_ts(data: dict) -> float | None:
 def push_data(req: PushReq, user_id: str = Depends(get_current_user_id), db: Session = Depends(get_db)):
     if req.store_name not in VALID_STORES:
         raise HTTPException(400, f"Invalid store: {req.store_name}")
+
+    # 前置校验：数量与单条体积上限（在逐条查询 DB 之前拒绝超大请求）
+    if not req.items:
+        raise HTTPException(400, "items 不能为空")
+    if len(req.items) > MAX_PUSH_ITEMS:
+        raise HTTPException(400, f"单次推送最多 {MAX_PUSH_ITEMS} 条")
+    for item in req.items:
+        data_bytes = len(json.dumps(item.data, ensure_ascii=False).encode("utf-8"))
+        if data_bytes > MAX_ITEM_BYTES:
+            raise HTTPException(413, f"单条记录体积不能超过 {MAX_ITEM_BYTES // 1024}KB")
 
     synced = 0
     skipped = 0
@@ -100,6 +118,28 @@ def pull_data(req: PullReq, user_id: str = Depends(get_current_user_id), db: Ses
             raise HTTPException(400, "since 必须是合法的 ISO datetime")
         if since_dt.tzinfo is not None:
             since_dt = since_dt.replace(tzinfo=None)
+
+    # 墓碑 GC：清理超期墓碑（data.deleted=true 且 updated_at 早于保留期）。
+    # 这些墓碑已随历次 pull 传播给所有活跃客户端，保留只会让 user_sync 表无限膨胀。
+    # 按用户 + 本次请求的 store 范围清理；不传 since 的旧客户端同样触发（按绝对年龄判断）。
+    if req.store_names:
+        gc_cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=TOMBSTONE_GC_DAYS)
+        stale_rows = db.query(UserSync).filter(
+            UserSync.user_id == user_id,
+            UserSync.store_name.in_(req.store_names),
+            UserSync.updated_at < gc_cutoff,
+        ).all()
+        gc_ids = []
+        for r in stale_rows:
+            try:
+                r_data = json.loads(r.data)
+            except (json.JSONDecodeError, TypeError):
+                r_data = {}
+            if r_data.get("deleted") is True:
+                gc_ids.append(r.id)
+        if gc_ids:
+            db.query(UserSync).filter(UserSync.id.in_(gc_ids)).delete(synchronize_session=False)
+            db.commit()
 
     result = {}
     for store_name in req.store_names:

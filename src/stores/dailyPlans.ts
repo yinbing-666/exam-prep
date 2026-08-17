@@ -1,18 +1,24 @@
 import { DailyPlan } from '../types';
 import { getAll, put, putMany, deleteById } from './db';
+import { schedulePush } from './sync';
 
 export async function getAllDailyPlans(): Promise<DailyPlan[]> {
   return getAll<DailyPlan>('dailyPlans');
 }
 
 export async function saveDailyPlans(plans: DailyPlan[]): Promise<void> {
-  return putMany('dailyPlans', plans);
+  await putMany('dailyPlans', plans);
+  schedulePush('dailyPlans');
 }
 
 export async function updatePlanStatus(id: string, status: 'pending' | 'done'): Promise<void> {
   const plans = await getAllDailyPlans();
   const plan = plans.find(p => p.id === id);
-  if (plan) { plan.status = status; await put('dailyPlans', plan); }
+  if (plan) {
+    plan.status = status;
+    await put('dailyPlans', plan);
+  }
+  schedulePush('dailyPlans');
 }
 
 export async function completePlanWithFeedback(id: string, feedback: { mastery: 'red' | 'yellow' | 'green'; timeSpent: number; note: string }): Promise<void> {
@@ -26,6 +32,7 @@ export async function completePlanWithFeedback(id: string, feedback: { mastery: 
     plan.completedAt = Date.now();
     await put('dailyPlans', plan);
   }
+  schedulePush('dailyPlans');
 }
 
 export async function deleteAllDailyPlans(): Promise<void> {
@@ -34,4 +41,5 @@ export async function deleteAllDailyPlans(): Promise<void> {
   for (const p of plans) {
     await deleteById('dailyPlans', String(p.id));
   }
+  schedulePush('dailyPlans');
 }
