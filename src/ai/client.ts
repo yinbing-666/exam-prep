@@ -29,12 +29,16 @@ const BUILTIN_PROVIDER: ModelProvider = {
 };
 
 const STORAGE_KEY = 'exam-prep-model-config';
+// API Key 单独存储（providerId → apiKey），不与其他配置同桶，降低 localStorage 明文泄露面
+const KEYS_STORAGE_KEY = 'exam-prep-model-config-keys';
 
 export function getProviders(): ModelProvider[] {
   let customs: ModelProvider[] = [];
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) customs = JSON.parse(saved);
+    // 组装时从独立 key 存储恢复 apiKey
+    customs = customs.map((p) => ({ ...p, apiKey: readApiKey(p.id) }));
   } catch {}
   return [BUILTIN_PROVIDER, ...customs];
 }
@@ -42,13 +46,25 @@ export function getProviders(): ModelProvider[] {
 export function getCustomProviders(): ModelProvider[] {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) return JSON.parse(saved);
+    if (saved) return JSON.parse(saved).map((p: any) => ({ ...p, apiKey: readApiKey(p.id) }));
   } catch {}
   return [];
 }
 
+function readApiKey(providerId: string): string {
+  try {
+    const keys = JSON.parse(localStorage.getItem(KEYS_STORAGE_KEY) || '{}');
+    return keys[providerId] ?? '';
+  } catch { return ''; }
+}
+
 export function saveCustomProviders(providers: ModelProvider[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(providers));
+  // 剥离 apiKey 后存配置，apiKey 单独存
+  const stripped = providers.map(({ apiKey, ...rest }) => rest);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
+  const keys: Record<string, string> = {};
+  for (const p of providers) if (p.apiKey) keys[p.id] = p.apiKey;
+  localStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(keys));
 }
 
 export function addCustomProvider(): ModelProvider {
@@ -77,6 +93,12 @@ export function saveProviderConfig(providerId: string, updates: Partial<ModelPro
 export function deleteCustomProvider(providerId: string) {
   const customs = getCustomProviders().filter(p => p.id !== providerId);
   saveCustomProviders(customs);
+  // 清理对应 key
+  try {
+    const keys = JSON.parse(localStorage.getItem(KEYS_STORAGE_KEY) || '{}');
+    delete keys[providerId];
+    localStorage.setItem(KEYS_STORAGE_KEY, JSON.stringify(keys));
+  } catch {}
 }
 
 export function saveApiKey(providerId: string, apiKey: string) {
@@ -90,9 +112,16 @@ export async function callAI(
   systemPrompt: string,
   userContent: string
 ): Promise<string> {
-  // 如果用户已登录，走后端中转（保护API Key）
-  const token = getToken();
-  if (token) {
+  const providers = getProviders();
+  const provider = providers.find(p => p.id === providerId);
+  if (!provider) throw new Error(`未知模型提供商: ${providerId}`);
+
+  // 内置提供商：登录用户走后端中转（保护后端 Key）；未登录不可用
+  if (provider.builtin) {
+    const token = getToken();
+    if (!token) {
+      throw new Error('请先登录后使用内置模型，或在设置中配置自定义模型');
+    }
     const resp = await fetch('/api/ai/chat', {
       method: 'POST',
       headers: {
@@ -109,26 +138,22 @@ export async function callAI(
       }),
     });
     if (!resp.ok) {
-      // token 过期：全局登出并跳转登录页
       if (resp.status === 401) handleUnauthorized();
       const data = await resp.json().catch(() => ({}));
       throw new Error(data.detail || `API error: ${resp.status}`);
     }
     const data = await resp.json();
-    return data.choices?.[0]?.message?.content || data.content || JSON.stringify(data);
+    const content = data.choices?.[0]?.message?.content || data.content;
+    if (typeof content !== 'string' || !content) {
+      throw new Error('模型返回了无法解析的响应');
+    }
+    return content;
   }
 
-  // 未登录：保持原有直接调用逻辑
-  const providers = getProviders();
-  const provider = providers.find(p => p.id === providerId);
-  if (!provider) throw new Error(`未知模型提供商: ${providerId}`);
+  // 自定义提供商：始终直接调用（用自己的 Key），不依赖登录态
   if (!provider.apiKey) {
-    if (provider.builtin) {
-      throw new Error('请先登录后使用内置模型，或在设置中配置自定义模型');
-    }
     throw new Error(`请先在设置中配置 ${provider.name} 的 API Key`);
   }
-
   const resp = await fetch(provider.baseUrl, {
     method: 'POST',
     headers: {
@@ -147,5 +172,9 @@ export async function callAI(
 
   if (!resp.ok) throw new Error(`API error: ${resp.status}`);
   const data = await resp.json();
-  return data.choices[0].message.content;
+  const content = data.choices?.[0]?.message?.content;
+  if (typeof content !== 'string' || !content) {
+    throw new Error('模型返回了无法解析的响应');
+  }
+  return content;
 }

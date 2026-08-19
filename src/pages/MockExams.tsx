@@ -92,7 +92,7 @@ export default function MockExams({ onBack, subject }: Props) {
   async function handleGenerate() {
     if (config.chapters.length === 0) { setError('请至少选择一个章节'); return; }
     if (totalQuestions === 0) { setError('请至少设置一种题型'); return; }
-    if (selectedFiles.length === 0) { setError('请至少选择一个文件'); return; }
+    if (subject && selectedFiles.length === 0) { setError('请至少选择一个文件'); return; }
     const currentProvider = providers.find(p => p.id === providerId);
     if (!currentProvider?.apiKey) { setError('请先配置API Key'); return; }
 

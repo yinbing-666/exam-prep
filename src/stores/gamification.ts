@@ -50,52 +50,77 @@ export async function saveAchievements(achievements: Achievement[]): Promise<voi
   schedulePush('gamification');
 }
 
+// 可重入写锁：串行化 profile「读-改-写」，避免并发（答题/打卡/加XP）互相覆盖导致数据丢失
+let profileLock: Promise<void> = Promise.resolve();
+let inProfileLock = false;
+async function withProfileLock<T>(fn: () => Promise<T>): Promise<T> {
+  // 可重入：已持锁则直接执行，避免嵌套调用（如 updateStreak 调 addXP）死锁
+  if (inProfileLock) return fn();
+  const prev = profileLock;
+  let release!: () => void;
+  profileLock = new Promise<void>((r) => { release = r; });
+  inProfileLock = true;
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    inProfileLock = false;
+    release();
+  }
+}
+
 // 增加XP并处理升级
 export async function addXP(amount: number, reason: string): Promise<{ leveledUp: boolean; newLevel: number }> {
-  const profile = await getProfile();
-  profile.xp += amount;
-  let leveledUp = false;
+  return withProfileLock(async () => {
+    const profile = await getProfile();
+    profile.xp += amount;
+    let leveledUp = false;
 
-  while (profile.xp >= profile.xpToNext) {
-    profile.xp -= profile.xpToNext;
-    profile.level += 1;
-    profile.xpToNext = getXpForLevel(profile.level);
-    leveledUp = true;
-  }
+    while (profile.xp >= profile.xpToNext) {
+      profile.xp -= profile.xpToNext;
+      profile.level += 1;
+      profile.xpToNext = getXpForLevel(profile.level);
+      leveledUp = true;
+    }
 
-  await saveProfile(profile);
-  return { leveledUp, newLevel: profile.level };
+    await saveProfile(profile);
+    return { leveledUp, newLevel: profile.level };
+  });
 }
 
 // 更新打卡
 export async function updateStreak(): Promise<{ streak: number; isNew: boolean }> {
-  const profile = await getProfile();
-  const today = toLocalDateStr(new Date());
+  return withProfileLock(async () => {
+    const profile = await getProfile();
+    const today = toLocalDateStr(new Date());
 
-  if (profile.lastStudyDate === today) {
-    return { streak: profile.streak, isNew: false };
-  }
+    if (profile.lastStudyDate === today) {
+      return { streak: profile.streak, isNew: false };
+    }
 
-  const yesterday = toLocalDateStr(new Date(Date.now() - 86400000));
-  if (profile.lastStudyDate === yesterday) {
-    profile.streak += 1;
-  } else if (profile.lastStudyDate !== today) {
-    profile.streak = 1;
-  }
+    const yesterday = toLocalDateStr(new Date(Date.now() - 86400000));
+    if (profile.lastStudyDate === yesterday) {
+      profile.streak += 1;
+    } else if (profile.lastStudyDate !== today) {
+      profile.streak = 1;
+    }
 
-  profile.lastStudyDate = today;
-  await saveProfile(profile);
-  await addXP(XP_RULES.daily_streak, 'daily_streak');
-  return { streak: profile.streak, isNew: true };
+    profile.lastStudyDate = today;
+    await saveProfile(profile);
+    await addXP(XP_RULES.daily_streak, 'daily_streak');
+    return { streak: profile.streak, isNew: true };
+  });
 }
 
 // 记录答题结果
 export async function recordQuiz(correct: boolean): Promise<void> {
-  const profile = await getProfile();
-  profile.totalQuestions += 1;
-  if (correct) profile.correctCount += 1;
-  await saveProfile(profile);
-  await addXP(correct ? XP_RULES.quiz_correct : XP_RULES.quiz_wrong, correct ? 'quiz_correct' : 'quiz_wrong');
+  await withProfileLock(async () => {
+    const profile = await getProfile();
+    profile.totalQuestions += 1;
+    if (correct) profile.correctCount += 1;
+    await saveProfile(profile);
+    await addXP(correct ? XP_RULES.quiz_correct : XP_RULES.quiz_wrong, correct ? 'quiz_correct' : 'quiz_wrong');
+  });
   await checkAchievements();
 }
 
@@ -156,7 +181,9 @@ export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
 
 // 记录学习时长（分钟）
 export async function addStudyMinutes(minutes: number): Promise<void> {
-  const profile = await getProfile();
-  profile.totalStudyMinutes += minutes;
-  await saveProfile(profile);
+  await withProfileLock(async () => {
+    const profile = await getProfile();
+    profile.totalStudyMinutes += minutes;
+    await saveProfile(profile);
+  });
 }

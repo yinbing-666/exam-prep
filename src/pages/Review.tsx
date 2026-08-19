@@ -44,22 +44,38 @@ const Review: React.FC<ReviewProps> = ({ reviewQuestions: initQuestions, onSessi
   }
 
   async function handleMarkMastered(questionId: string) {
-    await markMastered(questionId);
-    setWrongQuestions(prev => prev.filter(q => q.questionId !== questionId));
-    // Advance to next in review mode
-    if (reviewMode && reviewIndex < wrongQuestions.length - 1) {
-      setReviewIndex(prev => prev);
+    try {
+      await markMastered(questionId);
+      const idx = wrongQuestions.findIndex(q => q.questionId === questionId);
+      const next = wrongQuestions.filter(q => q.questionId !== questionId);
+      setWrongQuestions(next);
+      // 删除当前题后重新收敛索引：不回退会跳过、不回拉会越界崩溃
+      if (next.length === 0) {
+        onSessionEnd?.();
+      } else {
+        setReviewIndex(Math.min(idx, next.length - 1));
+        setExpandedId(null);
+      }
+    } catch (error) {
+      console.error('标记掌握失败:', error);
     }
   }
 
   function handleReviewAnswer(correct: boolean) {
     if (correct) setReviewScore(s => s + 1);
-    if (reviewIndex < wrongQuestions.length - 1) {
-      setExpandedId(wrongQuestions[reviewIndex + 1].questionId);
+    const nextIndex = reviewIndex + 1;
+    if (nextIndex < wrongQuestions.length) {
+      setReviewIndex(nextIndex);
+      setExpandedId(null);
     } else {
-      // Review complete
-      if (onSessionEnd) onSessionEnd();
+      onSessionEnd?.();
     }
+  }
+
+  // 已掌握：加分 + 删除当前题并收敛索引（由 handleMarkMastered 统一处理，避免与 handleReviewAnswer 双重 setReviewIndex 冲突）
+  async function handleMasterAndNext(questionId: string) {
+    setReviewScore(s => s + 1);
+    await handleMarkMastered(questionId);
   }
 
   function handleExitReview() {
@@ -164,13 +180,13 @@ const Review: React.FC<ReviewProps> = ({ reviewQuestions: initQuestions, onSessi
           {expandedId === current.questionId && (
             <div style={{ display: 'flex', gap: 12 }}>
               <button
-                onClick={() => { handleReviewAnswer(false); setReviewIndex(i => i + 1); setExpandedId(null); }}
+                onClick={() => handleReviewAnswer(false)}
                 style={{ flex: 1, padding: 12, background: '#fee2e2', color: '#991b1b', border: '1px solid #fca5a5', borderRadius: 8, fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}
               >
                 还不太会 ✗
               </button>
               <button
-                onClick={() => { handleMarkMastered(current.questionId); handleReviewAnswer(true); setReviewIndex(i => i + 1); setExpandedId(null); }}
+                onClick={() => handleMasterAndNext(current.questionId)}
                 style={{ flex: 1, padding: 12, background: '#dcfce7', color: '#166534', border: '1px solid #86efac', borderRadius: 8, fontSize: '0.9rem', cursor: 'pointer', fontWeight: 600 }}
               >
                 已掌握 ✓

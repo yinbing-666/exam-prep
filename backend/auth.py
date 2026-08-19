@@ -16,7 +16,7 @@ SECRET_KEY = _secret
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 # auto_error=False：缺 Authorization 头时由 get_current_user_id 统一抛 401，
 # 而不是 FastAPI 默认的 403（与客户端"未登录"语义匹配）
 security = HTTPBearer(auto_error=False)

@@ -134,8 +134,8 @@ export async function calculateReadiness(): Promise<ReadinessData> {
 
   // Today focus: top 3 weak tags sorted by error count
   const todayFocus = Object.entries(knowledgeTagPerformance)
-    .filter(([, p]) => p.total > 0)
-    .sort((a, b) => (a[1].total - a[1].correct) - (b[1].total - b[1].correct))
+    .filter(([, p]) => p.total >= 2 && p.percentage < 0.65)
+    .sort((a, b) => (b[1].total - b[1].correct) - (a[1].total - a[1].correct))
     .slice(0, 3)
     .map(([tag]) => tag)
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { GameIcon } from './SharedUI';
 
@@ -11,12 +11,32 @@ export default function ActivationModal({ onSuccess }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [activationAvailable, setActivationAvailable] = useState(false);
+  const [activation, setActivation] = useState<any>(null);
+
+  useEffect(() => {
+    const loadActivationModule = async () => {
+      try {
+        const mod = await import('../utils/activation');
+        setActivation(mod);
+        setActivationAvailable(true);
+      } catch (err) {
+        console.error('Failed to load activation module:', err);
+        setActivationAvailable(false);
+      }
+    };
+    loadActivationModule();
+  }, []);
 
   async function handleActivate() {
     if (!code.trim()) { setError('请输入激活码'); return; }
+    if (!activationAvailable) {
+      setError('激活模块不可用，请联系管理员');
+      return;
+    }
     setLoading(true); setError('');
     try {
-      const { activateCode, getDeviceId } = await import('../utils/activation');
+      const { activateCode, getDeviceId } = activation;
       const result = await activateCode(code.trim().toUpperCase(), getDeviceId());
       setLoading(false);
       if (result.ok) onSuccess();
@@ -44,7 +64,7 @@ export default function ActivationModal({ onSuccess }: Props) {
             onKeyDown={(e) => { if (e.key === 'Enter') handleActivate(); }} />
           {error && <p className="text-[11px] font-black text-red-500 text-center">{error}</p>}
         </div>
-        <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} onClick={handleActivate} disabled={loading}
+        <motion.button whileHover={{ y: -1 }} whileTap={{ scale: 0.97 }} onClick={handleActivate} disabled={loading || !activationAvailable}
           className="w-full mt-5 bg-gradient-to-r from-[#f97316] to-[#eab308] border-b-[4px] border-[#c2410c] active:border-b-0 text-white font-black py-3.5 rounded-2xl shadow-lg shadow-orange-500/20 text-sm tracking-[2px]">
           {loading ? '全真密码链验证中...' : '立 刻 激 活 🚀'}
         </motion.button>

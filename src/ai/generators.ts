@@ -5,6 +5,14 @@ import { callAI } from './client';
 import { buildQuizPrompt, buildPlanPrompt, buildMockPrompt, buildMemorizePrompt, buildKnowledgeExtractPrompt, DAILY_PLAN_SYSTEM_PROMPT, SubjectConfig } from './prompts';
 import { batchSaveQuestions } from './api';
 
+/** 生成唯一 ID：优先 crypto.randomUUID（需安全上下文），不可用时降级为时间戳+随机后缀 */
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10) + '-' + Math.random().toString(36).slice(2, 10);
+}
+
 function extractJSON(text: string): any[] {
   // 1. 尝试直接提取JSON数组
   const match = text.match(/\[[\s\S]*\]/);
@@ -169,11 +177,11 @@ export async function generateKnowledgePoints(
   const raw = extractJSON(text);
   return raw
     .filter((k: any) => k && typeof k.title === 'string' && k.title.trim().length > 0)
-    .map((k: any) => ({
+    .map((k, i) => ({
       title: k.title.trim(),
-      definition: (k.definition || '').trim(),
-      exam_hint: (k.exam_hint || '').trim(),
-    }));
+      definition: typeof k.definition === 'string' ? k.definition.trim() : '',
+      exam_hint: typeof k.exam_hint === 'string' ? k.exam_hint.trim() : '',
+    }))
 }
 
 // ─── P1-4 end ─────────────────────────────────────────────────
@@ -207,7 +215,7 @@ export async function generateQuestionsTwoStage(
     const text = await callAI(providerId, modelId, prompt, `课程内容：\n${content}`);
     const raw = extractJSON(text);
     const parsed: Question[] = raw.map((q: any, i: number) => ({
-      id: `${Date.now()}-${attempts}-${i}`,
+      id: generateId(),
       type: q.type,
       question: q.question,
       options: q.options,
@@ -233,7 +241,7 @@ export async function generateQuestionsTwoStage(
   const text = await callAI(providerId, modelId, fallbackPrompt, `课程内容：\n${content}`);
   const raw = extractJSON(text);
   const fallbackQuestions = raw.map((q: any, i: number) => ({
-    id: `${Date.now()}-fallback-${i}`,
+    id: generateId(),
     type: q.type,
     question: q.question,
     options: q.options,
@@ -278,7 +286,7 @@ export async function generateQuestions(
     const raw = extractJSON(text);
 
     const parsed: Question[] = raw.map((q: any, i: number) => ({
-      id: `${Date.now()}-${attempts}-${i}`,
+      id: generateId(),
       type: q.type,
       question: q.question,
       options: q.options,
@@ -309,7 +317,7 @@ export async function generateQuestions(
   const text = await callAI(providerId, modelId, fallbackPrompt, `课程内容：\n${content}`);
   const raw = extractJSON(text);
   const fallbackQuestions = raw.map((q: any, i: number) => ({
-    id: `${Date.now()}-fallback-${i}`,
+    id: generateId(),
     type: q.type,
     question: q.question,
     options: q.options,
@@ -333,8 +341,8 @@ export async function generateModules(
 ): Promise<KnowledgeModule[]> {
   const text = await callAI(providerId, modelId, buildPlanPrompt(subjectConfig), `请根据以下${chapter}的课件内容，拆出知识模块：\n\n${content}`);
   return extractJSON(text).map((m: any, i: number) => ({
-    id: `${Date.now()}-${i}`, 
-    title: m.title, 
+    id: generateId(),
+    title: m.title,
     chapter, 
     estimatedMinutes: m.estimated_minutes || 30,
     difficulty: m.difficulty || '中', 
@@ -404,7 +412,7 @@ export async function generateDailyPlan(
   const parsed = extractJSON(text);
 
   return parsed.map((p: any, i: number) => ({
-    id: `plan-${Date.now()}-${i}`,
+    id: generateId(),
     moduleId: p.module_id,
     moduleTitle: p.module_title,
     date: p.date,

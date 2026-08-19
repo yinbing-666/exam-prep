@@ -1,6 +1,5 @@
 import { GeetestResult } from '../components/GeetestCaptcha';
 
-const TOKEN_KEY = 'exam_token';
 const USER_KEY = 'exam_user';
 
 export interface AuthUser {
@@ -13,8 +12,6 @@ let currentUser: AuthUser | null = null;
 
 // 初始化时从 localStorage 加载
 export function initAuth() {
-  currentToken = localStorage.getItem(TOKEN_KEY);
-
   const userStr = localStorage.getItem(USER_KEY);
   if (userStr) {
     try {
@@ -40,7 +37,6 @@ export function isLoggedIn(): boolean {
 export function logout() {
   currentToken = null;
   currentUser = null;
-  localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
 }
 
@@ -93,7 +89,6 @@ export async function login(username: string, password: string, captcha?: Geetes
   currentUser = { user_id: data.user_id, nickname: data.nickname || username };
   
   // 保存到 localStorage
-  localStorage.setItem(TOKEN_KEY, currentToken!);
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
   
   return currentUser;
@@ -120,7 +115,6 @@ export async function register(username: string, password: string, nickname?: st
   currentUser = { user_id: data.user_id, nickname: data.nickname || username };
   
   // 保存到 localStorage
-  localStorage.setItem(TOKEN_KEY, currentToken!);
   localStorage.setItem(USER_KEY, JSON.stringify(currentUser));
   
   return currentUser;

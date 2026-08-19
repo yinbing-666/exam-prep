@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { KnowledgeModule } from '../types';
-import { getAllModules, updateModuleStatus, deleteAllModules, getSubjectFiles, saveModules } from '../stores';
+import { getAllModules, updateModuleStatus, getSubjectFiles, saveModules } from '../stores';
+import { deleteById } from '../stores/db';
 import { getProviders } from '../ai';
 import { getAllStudySets } from '../stores';
 import { buildPlanPrompt, type SubjectConfig } from '../ai/prompts';
@@ -116,9 +117,18 @@ export default function Modules({ onBack, onStartStudy, subject: subjectName, su
         createdAt: m.createdAt || Date.now(),
       }));
       
-      // 保存到本地
-      await deleteAllModules();
-      await saveModules(modulesWithIds);
+      // 保存到本地：只替换当前科目（不误删其他科目）。
+      // 先写入新模块，再删除本科目不在新结果中的旧记录（逐条写墓碑，避免 pull 复活）
+      await saveModules(modulesWithIds)
+      if (subjectId) {
+        const all = await getAllModules()
+        for (const m of all) {
+          if (String((m as any).subject_id) === String(subjectId) &&
+              !modulesWithIds.some((n: any) => n.id === m.id)) {
+            await deleteById('modules', String(m.id))
+          }
+        }
+      }
       await loadModules();
       
       setJobId(null);

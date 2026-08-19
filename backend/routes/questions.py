@@ -45,6 +45,7 @@ def record_question(body: QuestionRecord, db: Session = Depends(get_db), user_id
 
     existing = db.query(AIGeneratedQuestion).filter(
         AIGeneratedQuestion.user_id == user_id,
+        AIGeneratedQuestion.subject_id == body.subject_id,
         AIGeneratedQuestion.question_hash == q_hash,
     ).first()
     if existing:
@@ -97,6 +98,7 @@ def record_questions_batch(body: List[QuestionRecord], db: Session = Depends(get
         q_hash = _question_hash(item.question_text)
         existing = db.query(AIGeneratedQuestion).filter(
             AIGeneratedQuestion.user_id == user_id,
+            AIGeneratedQuestion.subject_id == item.subject_id,
             AIGeneratedQuestion.question_hash == q_hash,
         ).first()
 

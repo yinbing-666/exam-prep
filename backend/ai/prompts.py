@@ -92,19 +92,22 @@ def buildMockPrompt(config: dict) -> str:
     question_types = config.get("questionTypes", {"choice": 10, "judge": 5, "short": 5, "essay": 2, "programming": 3})
     scoring = config.get("scoring", {"choice": 2, "judge": 2, "short": 10, "essay": 15, "programming": 10})
 
+    DEFAULT_SCORING = {"choice": 2, "judge": 2, "short": 10, "essay": 15, "programming": 10}
+    merged_scoring = {**DEFAULT_SCORING, **scoring}
+
     total = sum(question_types.values())
-    total_score = sum(question_types[k] * scoring.get(k, 0) for k in question_types)
+    total_score = sum(question_types[k] * merged_scoring[k] for k in question_types)
 
     return f"""你是本课程的模考出题专家。严格根据导入资料出题，不编造资料里没有的内容。
 考试范围：{'、'.join(chapters)}
 总题量：{total}道 | 总分：{total_score}分 | 时长：{duration}分钟
 
 题型与分值：
-- 选择题 {question_types.get('choice', 0)} 道 × {scoring.get('choice', 2)} 分
-- 判断题 {question_types.get('judge', 0)} 道 × {scoring.get('judge', 2)} 分
-- 简答题 {question_types.get('short', 0)} 道 × {scoring.get('short', 10)} 分
-- 程序题 {question_types.get('programming', 0)} 道 × {scoring.get('programming', 10)} 分
-- 论述题 {question_types.get('essay', 0)} 道 × {scoring.get('essay', 15)} 分
+- 选择题 {question_types.get('choice', 0)} 道 × {merged_scoring['choice']} 分
+- 判断题 {question_types.get('judge', 0)} 道 × {merged_scoring['judge']} 分
+- 简答题 {question_types.get('short', 0)} 道 × {merged_scoring['short']} 分
+- 程序题 {question_types.get('programming', 0)} 道 × {merged_scoring['programming']} 分
+- 论述题 {question_types.get('essay', 0)} 道 × {merged_scoring['essay']} 分
 
 输出格式（严格遵守）：
 【试卷标题】
